@@ -214,6 +214,46 @@ testClearQueueRejects('clearQueue rejects pending promises when enabled', async 
 	await t.throwsAsync(pendingPromiseTwo, {name: 'AbortError'});
 });
 
+testClearQueueRejects('clearQueue rejects pending map tasks with AbortError and counts converge', async t => {
+	const limit = pLimit({concurrency: 1, rejectOnClear: true});
+
+	let firstStarted = false;
+	let firstCompleted = false;
+
+	const mapPromise = limit.map([1, 2, 3], async value => {
+		if (value === 1) {
+			firstStarted = true;
+			await delay(100);
+			firstCompleted = true;
+			return value;
+		}
+
+		await delay(10);
+		return value;
+	});
+
+	// Let the first task start running while the rest stay queued
+	await delay(0);
+	t.true(firstStarted);
+	t.is(limit.activeCount, 1);
+	t.is(limit.pendingCount, 2);
+
+	// Clearing the queue aborts the pending map tasks but leaves the running one alone
+	limit.clearQueue();
+	t.is(limit.pendingCount, 0);
+	t.is(limit.activeCount, 1);
+	t.false(firstCompleted);
+
+	// The map rejects because its pending tasks were aborted
+	await t.throwsAsync(mapPromise, {name: 'AbortError'});
+
+	// Wait for the still-running task to finish so counts can settle
+	await delay(150);
+	t.true(firstCompleted);
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+});
+
 test('map', async t => {
 	const limit = pLimit(1);
 	const results = await limit.map([1, 2, 3, 4, 5, 6, 7], input => input + 1);

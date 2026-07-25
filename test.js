@@ -400,6 +400,47 @@ test('change concurrency to bigger value', async t => {
 	t.deepEqual(log, [1, 2, 3, 4, 4, 4, 4, 4, 4, 4]);
 });
 
+testClearQueueRejects('regression guard — clearQueue + rejectOnClear + map cancellation converges and the limiter stays usable afterwards', async t => {
+	const limit = pLimit({concurrency: 2, rejectOnClear: true});
+
+	const started = [];
+	const completed = [];
+
+	const mapPromise = limit.map([1, 2, 3, 4, 5], async value => {
+		started.push(value);
+		await delay(value <= 2 ? 100 : 10);
+		completed.push(value);
+		return value;
+	});
+
+	// Let the first two tasks start running while the rest stay queued
+	await delay(0);
+	t.is(limit.activeCount, 2);
+	t.is(limit.pendingCount, 3);
+
+	// Cancelling must abort every pending task without touching the running ones
+	limit.clearQueue();
+	t.is(limit.pendingCount, 0);
+	t.is(limit.activeCount, 2);
+	t.deepEqual(completed, []);
+
+	// The map must reject (not hang forever) because its pending tasks were aborted
+	await t.throwsAsync(mapPromise, {name: 'AbortError'});
+
+	// The still-running tasks must be left alone and eventually converge to idle
+	await delay(150);
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+	t.deepEqual(started.sort(), [1, 2]);
+	t.deepEqual(completed.sort(), [1, 2]);
+
+	// Convergence must be real, not cosmetic: the limiter must still accept and run new work afterwards
+	const recovered = await limit.map([10, 20], async value => value * 2);
+	t.deepEqual(recovered, [20, 40]);
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+});
+
 test('limitFunction()', async t => {
 	const concurrency = 5;
 	let running = 0;

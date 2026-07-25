@@ -441,6 +441,42 @@ testClearQueueRejects('regression guard — clearQueue + rejectOnClear + map can
 	t.is(limit.pendingCount, 0);
 });
 
+testClearQueueRejects('regression guard — clearQueue settles every individual pending promise (direct + map) and stays a safe no-op when idle', async t => {
+	const limit = pLimit({concurrency: 1, rejectOnClear: true});
+
+	// Calling clearQueue before anything is queued must be a safe no-op.
+	t.notThrows(() => limit.clearQueue());
+
+	const runningPromise = limit(() => delay(50));
+	const directPromiseOne = limit(() => delay(10));
+	const directPromiseTwo = limit(() => delay(10));
+	const mapPromise = limit.map([1, 2], async value => {
+		await delay(10);
+		return value;
+	});
+
+	await Promise.resolve();
+	t.is(limit.pendingCount, 4);
+
+	limit.clearQueue();
+	t.is(limit.pendingCount, 0);
+
+	// Aggregate rejection alone can hide a straggling pending promise, since
+	// Promise.all short-circuits on the first rejection. Assert every individual
+	// promise — both directly queued and map-internal — actually settles instead
+	// of being left pending forever.
+	const settled = await Promise.allSettled([directPromiseOne, directPromiseTwo, mapPromise]);
+	t.true(settled.every(result => result.status === 'rejected'));
+	t.true(settled.every(result => result.reason?.name === 'AbortError'));
+
+	await runningPromise;
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+
+	// Calling clearQueue on an idle limiter (queue already empty again) must remain a safe no-op.
+	t.notThrows(() => limit.clearQueue());
+});
+
 test('limitFunction()', async t => {
 	const concurrency = 5;
 	let running = 0;

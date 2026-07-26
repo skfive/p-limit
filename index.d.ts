@@ -59,6 +59,13 @@ export type LimitFunction = {
 	readonly isIdle: boolean;
 
 	/**
+	Whether the limiter is currently saturated — `true` when `activeCount` has reached the `concurrency` limit (no free slot), `false` while a slot is still available.
+
+	This is a read-only `O(1)` snapshot that reads the live `concurrency`, so it is accurate synchronously right after a `concurrency` change. A limiter with infinite `concurrency` is never saturated.
+	*/
+	readonly isSaturated: boolean;
+
+	/**
 	@param fn - Promise-returning/async function.
 	@param arguments - Any arguments to pass through to `fn`. Support for passing arguments on to the `fn` is provided in order to be able to avoid creating unnecessary closures. You probably don't need this optimization unless you're pushing a *lot* of functions.
 
@@ -187,6 +194,13 @@ export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
 	This is a read-only `O(1)` snapshot of the same idle state that `onIdle()` waits for.
 	*/
 	readonly isIdle: boolean;
+
+	/**
+	Whether the limiter is currently saturated — `true` when `activeCount` has reached the `concurrency` limit (no free slot), `false` while a slot is still available.
+
+	This is a read-only `O(1)` snapshot that reads the live `concurrency`, so it is accurate synchronously right after a `concurrency` change. A limiter with infinite `concurrency` is never saturated.
+	*/
+	readonly isSaturated: boolean;
 
 	/**
 	Call the limited function.

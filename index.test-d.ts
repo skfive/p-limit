@@ -32,11 +32,14 @@ expectType<Promise<void>>(limit.onIdle());
 
 expectType<boolean>(limit.isIdle);
 
+expectType<boolean>(limit.isSaturated);
+
 // LimitFunction should require a Promise-returning function
 const lf = limitFunction(async (_a: string) => 'ok', {concurrency: 1});
 expectType<Promise<string>>(lf('input'));
 expectType<Promise<void>>(lf.onIdle());
 expectType<boolean>(lf.isIdle);
+expectType<boolean>(lf.isSaturated);
 expectType<number>(lf.clearQueue());
 expectType<number>(lf.clearQueue(new Error('reason')));
 

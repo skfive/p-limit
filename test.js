@@ -1298,3 +1298,102 @@ test('limitFunction() exposes isIdle delegating to the underlying limiter', asyn
 	await running;
 	t.true(limitedFunction.isIdle);
 });
+
+// --- isSaturated (F68F701A7A-36) ---
+
+test('isSaturated is false for a freshly created limiter', t => {
+	const limit = pLimit(2);
+	t.false(limit.isSaturated);
+});
+
+test('isSaturated is false while active tasks stay below concurrency', async t => {
+	const limit = pLimit(3);
+
+	const promises = Array.from({length: 2}, () => limit(async () => delay(30)));
+	t.is(limit.activeCount, 2);
+	// Two active out of three slots — still a free slot, not saturated.
+	t.false(limit.isSaturated);
+
+	await Promise.all(promises);
+	t.false(limit.isSaturated);
+});
+
+test('isSaturated is true exactly when active tasks reach concurrency', async t => {
+	const limit = pLimit(2);
+
+	const promises = Array.from({length: 2}, () => limit(async () => delay(30)));
+	t.is(limit.activeCount, 2);
+	t.true(limit.isSaturated);
+
+	await Promise.all(promises);
+	// All settled — slots free again.
+	t.false(limit.isSaturated);
+});
+
+test('isSaturated is true while tasks are pending (active === concurrency, queue non-empty)', async t => {
+	const limit = pLimit(1);
+
+	const promises = Array.from({length: 3}, () => limit(async () => delay(20)));
+	t.is(limit.activeCount, 1);
+	t.is(limit.pendingCount, 2);
+	// The single slot is taken and work is queued behind it.
+	t.true(limit.isSaturated);
+
+	await Promise.all(promises);
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+	t.false(limit.isSaturated);
+});
+
+test('isSaturated flips to false synchronously when concurrency is raised above the active count', async t => {
+	const limit = pLimit(1);
+
+	const promises = Array.from({length: 3}, () => limit(async () => delay(30)));
+	t.is(limit.activeCount, 1);
+	t.true(limit.isSaturated);
+
+	// Raising the limit frees a slot immediately — the getter must reflect it
+	// synchronously, before the microtask that promotes queued work runs.
+	limit.concurrency = 2;
+	t.false(limit.isSaturated);
+
+	await Promise.all(promises);
+});
+
+test('isSaturated flips to true synchronously when concurrency is lowered to the active count', async t => {
+	const limit = pLimit(3);
+
+	const promises = Array.from({length: 2}, () => limit(async () => delay(30)));
+	t.is(limit.activeCount, 2);
+	t.false(limit.isSaturated);
+
+	// Lowering the limit to the current active count saturates immediately.
+	limit.concurrency = 2;
+	t.true(limit.isSaturated);
+
+	await Promise.all(promises);
+});
+
+test('isSaturated is always false for an infinite-concurrency limiter', async t => {
+	const limit = pLimit(Number.POSITIVE_INFINITY);
+
+	const promises = Array.from({length: 5}, () => limit(async () => delay(20)));
+	t.is(limit.activeCount, 5);
+	// No finite active count can ever reach infinite concurrency.
+	t.false(limit.isSaturated);
+
+	await Promise.all(promises);
+	t.false(limit.isSaturated);
+});
+
+test('limitFunction() exposes isSaturated delegating to the underlying limiter', async t => {
+	const limitedFunction = limitFunction(async () => delay(30), {concurrency: 1});
+
+	t.false(limitedFunction.isSaturated);
+
+	const running = limitedFunction();
+	t.true(limitedFunction.isSaturated);
+
+	await running;
+	t.false(limitedFunction.isSaturated);
+});

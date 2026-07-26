@@ -271,6 +271,13 @@ export default function pLimit(concurrency) {
 			// running, nothing queued, no lazy `limit.map()` still drawing.
 			get: () => isIdle(),
 		},
+		isSaturated: {
+			// O(1) read of whether every concurrency slot is occupied: `true` when
+			// `activeCount` has reached `concurrency`, `false` while a slot is free.
+			// Reads the live `concurrency`, so it is accurate synchronously right
+			// after a concurrency change (an infinite limit is never saturated).
+			get: () => activeCount >= concurrency,
+		},
 		concurrency: {
 			get: () => concurrency,
 
@@ -335,6 +342,9 @@ export function limitFunction(function_, options) {
 		},
 		isIdle: {
 			get: () => limit.isIdle,
+		},
+		isSaturated: {
+			get: () => limit.isSaturated,
 		},
 		concurrency: {
 			get: () => limit.concurrency,

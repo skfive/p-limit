@@ -198,6 +198,28 @@ console.log(limit.isIdle);
 //=> false
 ```
 
+### limit.isSaturated
+
+Type: `boolean`
+
+Whether the limiter is currently saturated — `true` when the number of running promises has reached the `concurrency` limit (no free slot), `false` while a slot is still available.
+
+This is a read-only `O(1)` snapshot that reads the live `concurrency`, so it is accurate synchronously right after a `concurrency` change. A limiter with infinite `concurrency` is never saturated.
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(1);
+
+console.log(limit.isSaturated);
+//=> false
+
+limit(() => fetch('https://example.com'));
+
+console.log(limit.isSaturated);
+//=> true
+```
+
 ### limitFunction(fn, options) <sup>named export</sup>
 
 Returns a function with limited concurrency.
@@ -244,7 +266,7 @@ Default: `false`
 Reject pending promises with an `AbortError` when `clearQueue()` is called.
 This is recommended if you await the returned promises, for example with `Promise.all`, so pending tasks do not remain unresolved after `clearQueue()`.
 
-The returned function also exposes the same control and observation surface as `limit`: `.activeCount`, `.pendingCount`, `.concurrency` (get/set), `.clearQueue()`, `.onIdle()`, and `.isIdle`.
+The returned function also exposes the same control and observation surface as `limit`: `.activeCount`, `.pendingCount`, `.concurrency` (get/set), `.clearQueue()`, `.onIdle()`, `.isIdle`, and `.isSaturated`.
 
 ```js
 import {limitFunction} from 'p-limit';

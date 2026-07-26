@@ -77,11 +77,32 @@ Warning: Avoid calling the same `limit` function inside a function that is alrea
 
 ### limit.map(iterable, mapperFunction)
 
-Process an iterable of inputs with limited concurrency.
+Process an iterable or async iterable of inputs with limited concurrency.
 
 The mapper function receives the item value and its index.
 
-Returns a promise equivalent to `Promise.all(Array.from(iterable, (item, index) => limit(mapperFunction, item, index)))`.
+Returns a promise that resolves to the mapper results in input (draw) order, regardless of the order in which they complete.
+
+Async iterables are consumed lazily: the next value is only pulled once a concurrency slot frees up, so at most `concurrency` items are drawn but not yet settled at any time. This makes it safe to pass infinite or streaming async iterables without pre-loading them into memory. Sync iterables keep the existing eager behavior.
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(2);
+
+async function * pages() {
+	let cursor;
+	do {
+		const page = await fetchPage(cursor);
+		cursor = page.nextCursor;
+		yield page.url;
+	} while (cursor);
+}
+
+// Only two pages are fetched and processed at a time; the generator is
+// pulled lazily as slots free up.
+const results = await limit.map(pages(), async url => fetch(url));
+```
 
 This is a convenience function for processing inputs that arrive in batches. For more complex use cases, see [p-map](https://github.com/sindresorhus/p-map).
 

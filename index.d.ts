@@ -27,18 +27,20 @@ export type LimitFunction = {
 	clearQueue: () => void;
 
 	/**
-	Process an iterable of inputs with limited concurrency.
+	Process an iterable or async iterable of inputs with limited concurrency.
 
 	The mapper function receives the item value and its index.
 
+	Async iterables are consumed lazily: the next value is only pulled when a concurrency slot frees up, so at most `concurrency` items are drawn but not yet settled at any time. This makes it safe to pass infinite or streaming async iterables. Sync iterables retain the existing eager behavior.
+
 	This is a convenience function for processing inputs that arrive in batches. For more complex use cases, see [p-map](https://github.com/sindresorhus/p-map).
 
-	@param iterable - An iterable containing an argument for the given function.
+	@param iterable - An iterable or async iterable containing an argument for the given function.
 	@param mapperFunction - Promise-returning/async function.
-	@returns A promise equivalent to `Promise.all(Array.from(iterable, (item, index) => limit(mapperFunction, item, index)))`.
+	@returns A promise resolving to the mapper results in input (draw) order, regardless of completion order.
 	*/
 	map: <Input, ReturnType> (
-		iterable: Iterable<Input>,
+		iterable: Iterable<Input> | AsyncIterable<Input>,
 		mapperFunction: (input: Input, index: number) => PromiseLike<ReturnType> | ReturnType
 	) => Promise<ReturnType[]>;
 

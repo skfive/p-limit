@@ -16,6 +16,10 @@ export default function pLimit(concurrency) {
 	const queue = new Queue();
 	let activeCount = 0;
 
+	// Active `limit.map` lazy schedulers. On a concurrency change we notify them
+	// so a raised limit promotes additional draws (mirrors the queue promotion below).
+	const mapSchedulers = new Set();
+
 	const resumeNext = () => {
 		// Process the next queued function if we're under the concurrency limit
 		if (activeCount < concurrency && queue.size > 0) {
@@ -67,6 +71,128 @@ export default function pLimit(concurrency) {
 		enqueue(function_, resolve, reject, arguments_);
 	});
 
+	// Lazily consume an async iterator, keeping at most `concurrency` items
+	// "drawn but not yet settled" at any time (no pre-loading). Results are
+	// stored by draw order, so completion order does not affect the output.
+	const mapAsyncIterable = (iterator, function_) => new Promise((resolve, reject) => {
+		const results = [];
+		let index = 0;
+		let inFlight = 0;
+		let iteratorDone = false;
+		let settled = false;
+		let drawing = false;
+
+		const finalizeReject = async error => {
+			settled = true;
+			mapSchedulers.delete(schedule);
+
+			// Best-effort iterator cleanup — call `return()` exactly once if present,
+			// matching how `for await...of` releases resources on early exit.
+			if (typeof iterator.return === 'function') {
+				try {
+					await iterator.return();
+				} catch {}
+			}
+
+			reject(error);
+		};
+
+		const settleResolve = () => {
+			settled = true;
+			mapSchedulers.delete(schedule);
+			resolve(results);
+		};
+
+		const onTaskDone = () => {
+			inFlight--;
+
+			if (settled) {
+				return;
+			}
+
+			if (iteratorDone && inFlight === 0) {
+				settleResolve();
+				return;
+			}
+
+			schedule();
+		};
+
+		// Run one mapper through the existing scheduling path so `active <= concurrency`
+		// stays enforced by the limiter itself (no duplicate scheduling logic).
+		const runTask = async (value, currentIndex) => {
+			try {
+				const result = await generator(function_, value, currentIndex);
+
+				if (!settled) {
+					results[currentIndex] = result;
+				}
+
+				onTaskDone();
+			} catch (error) {
+				inFlight--;
+
+				if (!settled) {
+					finalizeReject(error);
+				}
+			}
+		};
+
+		const drawOne = async () => {
+			drawing = true;
+			const currentIndex = index++;
+
+			let result;
+			try {
+				result = await iterator.next();
+			} catch (error) {
+				drawing = false;
+
+				if (!settled) {
+					iteratorDone = true;
+					finalizeReject(error);
+				}
+
+				return;
+			}
+
+			drawing = false;
+
+			if (settled) {
+				return;
+			}
+
+			if (result.done) {
+				iteratorDone = true;
+
+				if (inFlight === 0) {
+					settleResolve();
+				}
+
+				return;
+			}
+
+			inFlight++;
+			runTask(result.value, currentIndex);
+
+			// A slot may still be free — try to fill it.
+			schedule();
+		};
+
+		function schedule() {
+			if (settled || drawing || iteratorDone) {
+				return;
+			}
+
+			if (inFlight < concurrency) {
+				drawOne();
+			}
+		}
+
+		mapSchedulers.add(schedule);
+		schedule();
+	});
+
 	Object.defineProperties(generator, {
 		activeCount: {
 			get: () => activeCount,
@@ -100,11 +226,23 @@ export default function pLimit(concurrency) {
 					while (activeCount < concurrency && queue.size > 0) {
 						resumeNext();
 					}
+
+					// Promote lazily-consumed `limit.map` draws to the new limit too.
+					for (const schedule of mapSchedulers) {
+						schedule();
+					}
 				});
 			},
 		},
 		map: {
 			async value(iterable, function_) {
+				// Async iterables are consumed lazily so infinite/streaming sources
+				// work with O(concurrency) items in flight. Sync iterables keep the
+				// existing eager path for 100% backward-compatible behavior/timing.
+				if (typeof iterable[Symbol.asyncIterator] === 'function') {
+					return mapAsyncIterable(iterable[Symbol.asyncIterator](), function_);
+				}
+
 				const promises = Array.from(iterable, (value, index) => generator(function_, value, index));
 				return Promise.all(promises);
 			},

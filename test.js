@@ -314,6 +314,178 @@ test('map accepts an iterable (array iterator)', async t => {
 	t.deepEqual(results, [2, 4, 6, 8]);
 });
 
+test('map accepts an async iterable and preserves draw order', async t => {
+	const limit = pLimit(2);
+
+	async function * source() {
+		for (const value of [1, 2, 3]) {
+			yield value;
+		}
+	}
+
+	const results = await limit.map(source(), async value => {
+		// Later items finish first, but the output must stay in draw order.
+		await delay((4 - value) * 10);
+		return value * 10;
+	});
+
+	t.deepEqual(results, [10, 20, 30]);
+});
+
+test('map preserves async draw order and index when completion order is shuffled', async t => {
+	const limit = pLimit(3);
+
+	async function * source() {
+		for (const value of [0, 1, 2, 3, 4, 5]) {
+			yield value;
+		}
+	}
+
+	const results = await limit.map(source(), async (value, index) => {
+		await delay((6 - index) * 8);
+		return `${index}:${value}`;
+	});
+
+	t.deepEqual(results, ['0:0', '1:1', '2:2', '3:3', '4:4', '5:5']);
+});
+
+test('map with an empty async iterable resolves to [] and never calls the mapper', async t => {
+	const limit = pLimit(2);
+	let called = 0;
+
+	async function * source() {}
+
+	const results = await limit.map(source(), async value => {
+		called++;
+		return value;
+	});
+
+	t.deepEqual(results, []);
+	t.is(called, 0);
+});
+
+test('map lazily consumes an async iterable without pre-loading (in-flight <= concurrency)', async t => {
+	const limit = pLimit(2);
+	let drawn = 0;
+	let inFlight = 0;
+	let inFlightMax = 0;
+
+	async function * source() {
+		for (const value of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+			drawn++;
+			inFlight++;
+			inFlightMax = Math.max(inFlightMax, inFlight);
+			yield value;
+		}
+	}
+
+	const results = await limit.map(source(), async value => {
+		await delay(15);
+		inFlight--;
+		return value * 2;
+	});
+
+	t.deepEqual(results, [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]);
+	// Never draws more than `concurrency` items ahead of completion.
+	t.true(inFlightMax <= 2);
+	t.is(drawn, 10);
+});
+
+test('map rejects when the mapper throws and calls the async iterator return() exactly once', async t => {
+	const limit = pLimit(2);
+	let returnCalls = 0;
+	const error = new Error('mapper boom');
+
+	const iterable = {
+		[Symbol.asyncIterator]() {
+			let value = 0;
+			return {
+				async next() {
+					return value < 5 ? {value: value++, done: false} : {value: undefined, done: true};
+				},
+				async return() {
+					returnCalls++;
+					return {value: undefined, done: true};
+				},
+			};
+		},
+	};
+
+	// eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
+	await t.throwsAsync(limit.map(iterable, async value => {
+		if (value === 1) {
+			throw error;
+		}
+
+		await delay(50);
+		return value;
+	}), {is: error});
+
+	t.is(returnCalls, 1);
+});
+
+test('map rejects when the async iterator itself rejects and cleans up once', async t => {
+	const limit = pLimit(2);
+	let returnCalls = 0;
+	const error = new Error('iterator boom');
+
+	const iterable = {
+		[Symbol.asyncIterator]() {
+			let value = 0;
+			return {
+				async next() {
+					if (value === 2) {
+						throw error;
+					}
+
+					return {value: value++, done: false};
+				},
+				async return() {
+					returnCalls++;
+					return {value: undefined, done: true};
+				},
+			};
+		},
+	};
+
+	// eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
+	await t.throwsAsync(limit.map(iterable, async value => {
+		await delay(10);
+		return value;
+	}), {is: error});
+
+	t.is(returnCalls, 1);
+});
+
+test('map raises in-flight async draws when concurrency increases mid-flight', async t => {
+	const limit = pLimit(1);
+	let inFlight = 0;
+	let inFlightMax = 0;
+
+	async function * source() {
+		for (const value of [0, 1, 2, 3, 4, 5, 6, 7]) {
+			yield value;
+		}
+	}
+
+	const promise = limit.map(source(), async value => {
+		inFlight++;
+		inFlightMax = Math.max(inFlightMax, inFlight);
+		await delay(30);
+		inFlight--;
+		return value;
+	});
+
+	await delay(10);
+	t.is(inFlight, 1);
+
+	limit.concurrency = 3;
+
+	const results = await promise;
+	t.deepEqual(results, [0, 1, 2, 3, 4, 5, 6, 7]);
+	t.is(inFlightMax, 3);
+});
+
 test('accepts options object', async t => {
 	const limit = pLimit({concurrency: 1});
 

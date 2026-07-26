@@ -129,6 +129,28 @@ This is recommended if you await the returned promises, for example with `Promis
 
 Get or set the concurrency limit.
 
+### limit.onIdle()
+
+Returns a promise that resolves when the limiter becomes idle — no promises are currently running and none are waiting to run.
+
+If the limiter is already idle when this is called, the returned promise resolves immediately. This is event-driven (no polling or timers), so it also accounts for pending tasks discarded by `clearQueue()` and in-progress `limit.map()` calls.
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(2);
+
+for (const url of urls) {
+	limit(() => fetch(url));
+}
+
+// Resolves once every queued and running task has settled.
+await limit.onIdle();
+console.log('All done');
+```
+
+Note: If a running task never settles, the limiter never becomes idle and the returned promise never resolves — the same caveat as awaiting the task promises directly.
+
 ### limitFunction(fn, options) <sup>named export</sup>
 
 Returns a function with limited concurrency.
@@ -175,7 +197,7 @@ Default: `false`
 Reject pending promises with an `AbortError` when `clearQueue()` is called.
 This is recommended if you await the returned promises, for example with `Promise.all`, so pending tasks do not remain unresolved after `clearQueue()`.
 
-The returned function also exposes the same control and observation surface as `limit`: `.activeCount`, `.pendingCount`, `.concurrency` (get/set), and `.clearQueue()`.
+The returned function also exposes the same control and observation surface as `limit`: `.activeCount`, `.pendingCount`, `.concurrency` (get/set), `.clearQueue()`, and `.onIdle()`.
 
 ```js
 import {limitFunction} from 'p-limit';

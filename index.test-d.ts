@@ -21,9 +21,12 @@ expectType<number>(limit.pendingCount);
 expectType<void>(limit.clearQueue());
 expectType<void>(limitWithRejectOnClear.clearQueue());
 
+expectType<Promise<void>>(limit.onIdle());
+
 // LimitFunction should require a Promise-returning function
 const lf = limitFunction(async (_a: string) => 'ok', {concurrency: 1});
 expectType<Promise<string>>(lf('input'));
+expectType<Promise<void>>(lf.onIdle());
 
 expectError(limitFunction((_a: string) => 'x', {concurrency: 1}));
 expectError(pLimit({concurrency: 1, rejectOnClear: 'nope'}));

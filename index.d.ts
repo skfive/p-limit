@@ -52,6 +52,13 @@ export type LimitFunction = {
 	onIdle: () => Promise<void>;
 
 	/**
+	Whether the limiter is currently idle — `true` when no promises are running and none are waiting to run.
+
+	This is a read-only `O(1)` snapshot of the same idle state that `onIdle()` waits for.
+	*/
+	readonly isIdle: boolean;
+
+	/**
 	@param fn - Promise-returning/async function.
 	@param arguments - Any arguments to pass through to `fn`. Support for passing arguments on to the `fn` is provided in order to be able to avoid creating unnecessary closures. You probably don't need this optimization unless you're pushing a *lot* of functions.
 
@@ -173,6 +180,13 @@ export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
 	If the limiter is already idle when this is called, the returned promise resolves immediately.
 	*/
 	onIdle: () => Promise<void>;
+
+	/**
+	Whether the limiter is currently idle — `true` when no promises are running and none are waiting to run.
+
+	This is a read-only `O(1)` snapshot of the same idle state that `onIdle()` waits for.
+	*/
+	readonly isIdle: boolean;
 
 	/**
 	Call the limited function.

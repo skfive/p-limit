@@ -1201,3 +1201,100 @@ test('limitFunction() exposes onIdle() delegating to the underlying limiter', as
 	t.is(limitedFunction.activeCount, 0);
 	t.is(limitedFunction.pendingCount, 0);
 });
+
+// --- isIdle (F68F701A7A-32) ---
+
+test('isIdle is true for a freshly created limiter', t => {
+	const limit = pLimit(2);
+	t.true(limit.isIdle);
+});
+
+test('isIdle is false while a task is active and true once it settles', async t => {
+	const limit = pLimit(1);
+
+	const running = limit(async () => delay(30));
+	t.false(limit.isIdle);
+
+	await running;
+	t.true(limit.isIdle);
+});
+
+test('isIdle is false while tasks are pending (active + queued) and true after all settle', async t => {
+	const limit = pLimit(1);
+
+	const promises = Array.from({length: 3}, () => limit(async () => delay(20)));
+
+	t.is(limit.activeCount, 1);
+	t.is(limit.pendingCount, 2);
+	t.false(limit.isIdle);
+
+	await Promise.all(promises);
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+	t.true(limit.isIdle);
+});
+
+test('isIdle stays false while an active task remains after clearQueue() and becomes true once it ends', async t => {
+	const limit = pLimit(1);
+
+	const active = limit(async () => delay(40)); // Active
+	limit(async () => delay(40)); // Pending
+	limit(async () => delay(40)); // Pending
+
+	await Promise.resolve();
+	t.is(limit.activeCount, 1);
+	t.is(limit.pendingCount, 2);
+
+	limit.clearQueue();
+	t.is(limit.pendingCount, 0);
+	// The active task still runs — not idle yet.
+	t.false(limit.isIdle);
+
+	await active;
+	t.true(limit.isIdle);
+});
+
+test('isIdle is false while an async-iterable map is in progress', async t => {
+	const limit = pLimit(1);
+
+	async function * source() {
+		yield * [0, 1, 2, 3];
+	}
+
+	const mapped = limit.map(source(), async value => {
+		await delay(15);
+		return value;
+	});
+
+	// While the lazy map draws, `activeCount` can momentarily hit 0 between a draw
+	// settling and the next draw, but the limiter must still report non-idle until
+	// the map fully settles (mirrors the `onIdle()` contract).
+	t.false(limit.isIdle);
+
+	await mapped;
+	t.true(limit.isIdle);
+});
+
+test('isIdle reflects the idle state around concurrent completion', async t => {
+	const limit = pLimit(3);
+
+	const promises = Array.from({length: 3}, () => limit(async () => delay(20)));
+	t.is(limit.activeCount, 3);
+	t.false(limit.isIdle);
+
+	// All three settle together — the limiter must converge to idle.
+	await Promise.all(promises);
+	t.true(limit.isIdle);
+});
+
+test('limitFunction() exposes isIdle delegating to the underlying limiter', async t => {
+	const limitedFunction = limitFunction(async () => delay(30), {concurrency: 1});
+
+	t.true(limitedFunction.isIdle);
+
+	const running = limitedFunction();
+	t.false(limitedFunction.isIdle);
+
+	await running;
+	t.true(limitedFunction.isIdle);
+});

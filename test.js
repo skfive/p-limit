@@ -1397,3 +1397,104 @@ test('limitFunction() exposes isSaturated delegating to the underlying limiter',
 	await running;
 	t.false(limitedFunction.isSaturated);
 });
+
+// --- isSaturated complexity guard (F68F701A7A-38) ---
+// The doc/type contract (readme.md, index.d.ts) promises `isSaturated` is an O(1)
+// read — its cost must never grow with activeCount, pendingCount, or in-flight `map`
+// draws. These guards keep that contract from silently regressing to an O(n)
+// implementation (e.g. iterating the queue) as the code evolves.
+
+test('isSaturated getter performs a plain O(1) comparison — no loop/iteration/allocation (analysis)', t => {
+	const limit = pLimit(2);
+	const descriptor = Object.getOwnPropertyDescriptor(limit, 'isSaturated');
+
+	t.is(typeof descriptor.get, 'function');
+	t.is(descriptor.set, undefined); // Read-only — no setter to reason about.
+
+	const getterSource = descriptor.get.toString();
+
+	// The read's cost must be independent of how many tasks are active, pending, or
+	// being lazily drawn by `map` — so the getter body must not loop/iterate...
+	t.notRegex(
+		getterSource,
+		/\bfor\s*\(|\.forEach\(|\.reduce\(|while\s*\(/,
+		`isSaturated getter must not contain a loop (found in: ${getterSource})`,
+	);
+	// ...must not read a collection whose size scales with task count...
+	t.notRegex(
+		getterSource,
+		/queue\.|mapSchedulers|idleWaiters/,
+		`isSaturated getter must only compare the scalar activeCount/concurrency (found in: ${getterSource})`,
+	);
+	// ...and must not allocate (keeps space O(1) too).
+	t.notRegex(
+		getterSource,
+		/\bnew\s+/,
+		`isSaturated getter must not allocate (found in: ${getterSource})`,
+	);
+});
+
+test('limitFunction() isSaturated getter delegates without adding its own loop/iteration (analysis)', t => {
+	const limitedFunction = limitFunction(async () => {}, {concurrency: 1});
+	const descriptor = Object.getOwnPropertyDescriptor(limitedFunction, 'isSaturated');
+
+	t.is(typeof descriptor.get, 'function');
+	t.is(descriptor.set, undefined);
+
+	const getterSource = descriptor.get.toString();
+	t.notRegex(
+		getterSource,
+		/\bfor\s*\(|\.forEach\(|\.reduce\(|while\s*\(/,
+		`limitFunction() isSaturated getter must not loop (found in: ${getterSource})`,
+	);
+});
+
+test('isSaturated read time does not scale with pending queue size (benchmark)', async t => {
+	// Kept deliberately small (queue fill + reads finish in low single-digit ms): AVA runs
+	// this file's tests concurrently in one process, so a longer synchronous busy-loop here
+	// would block the event loop and could itself make unrelated timing-sensitive tests flaky.
+	const measureReadTimeMs = async pendingSize => {
+		const limit = pLimit(1);
+		limit(() => new Promise(() => {})); // Occupies the only slot; deliberately never settles.
+		await Promise.resolve();
+
+		for (let index = 0; index < pendingSize; index++) {
+			limit(() => {});
+		}
+
+		t.is(limit.pendingCount, pendingSize);
+
+		const iterations = 5000;
+
+		// Warm up the getter once before timing, so JIT warmup noise doesn't skew the read.
+		for (let index = 0; index < 1000; index++) {
+			if (limit.isSaturated) {
+				// No-op — the branch just forces the read so it can't be optimized away.
+			}
+		}
+
+		const start = process.hrtime.bigint();
+		for (let index = 0; index < iterations; index++) {
+			if (limit.isSaturated) {
+				// No-op — the branch just forces the read so it can't be optimized away.
+			}
+		}
+
+		const elapsedMs = Number(process.hrtime.bigint() - start) / 1e6;
+
+		limit.clearQueue(); // Drop the queued tasks; none of them were ever awaited on.
+		return elapsedMs;
+	};
+
+	const small = await measureReadTimeMs(5);
+	const large = await measureReadTimeMs(2000);
+
+	// A true O(1) getter costs the same regardless of pending queue size. The generous
+	// multiplier absorbs machine/CI noise while still catching an O(n) regression (e.g.
+	// iterating the queue on every read), which would blow past this by orders of magnitude
+	// at a 400x queue-size difference.
+	t.true(
+		large < (small * 20) + 50,
+		`expected roughly constant read time regardless of queue size, got small=${small.toFixed(2)}ms large=${large.toFixed(2)}ms`,
+	);
+});

@@ -1201,3 +1201,94 @@ test('limitFunction() exposes onIdle() delegating to the underlying limiter', as
 	t.is(limitedFunction.activeCount, 0);
 	t.is(limitedFunction.pendingCount, 0);
 });
+
+// --- isIdle (F68F701A7A-28) ---
+
+test('isIdle is true for a freshly created limiter', t => {
+	const limit = pLimit(2);
+
+	// Nothing running and nothing queued: activeCount === 0 && pendingCount === 0.
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+	t.true(limit.isIdle);
+});
+
+test('isIdle is false with an active task and no pending, then true after it settles', async t => {
+	const limit = pLimit(5);
+
+	const promise = limit(async () => delay(30));
+	t.is(limit.activeCount, 1);
+	t.is(limit.pendingCount, 0);
+	t.false(limit.isIdle);
+
+	await promise;
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+	t.true(limit.isIdle);
+});
+
+test('isIdle is false while tasks are active or pending and true once they all settle', async t => {
+	const limit = pLimit(2);
+
+	const promises = Array.from({length: 5}, () => limit(async () => delay(30)));
+	t.is(limit.activeCount, 2);
+	t.is(limit.pendingCount, 3);
+	t.false(limit.isIdle);
+
+	await Promise.all(promises);
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+	t.true(limit.isIdle);
+});
+
+test('isIdle becomes true after concurrent tasks complete at the same idle transition', async t => {
+	const limit = pLimit(3);
+
+	const promises = Array.from({length: 3}, () => limit(async () => delay(30)));
+	t.is(limit.activeCount, 3);
+	t.false(limit.isIdle);
+
+	await Promise.all(promises);
+	t.true(limit.isIdle);
+});
+
+test('isIdle is false after clearQueue leaves an active task and true once it finishes', async t => {
+	const limit = pLimit(1);
+
+	limit(() => delay(50)); // Active
+	limit(() => delay(50)); // Pending
+	limit(() => delay(50)); // Pending
+
+	await Promise.resolve();
+	t.is(limit.activeCount, 1);
+	t.is(limit.pendingCount, 2);
+	t.false(limit.isIdle);
+
+	// Clearing the queue removes the pending tasks but leaves the active one running.
+	limit.clearQueue();
+	t.is(limit.pendingCount, 0);
+	t.is(limit.activeCount, 1);
+	t.false(limit.isIdle);
+
+	await limit.onIdle();
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+	t.true(limit.isIdle);
+});
+
+test('limitFunction() exposes isIdle delegating to the underlying limiter', async t => {
+	const limitedFunction = limitFunction(() => delay(50), {concurrency: 1});
+
+	// Idle before any call.
+	t.true(limitedFunction.isIdle);
+
+	const promises = Array.from({length: 3}, () => limitedFunction());
+	t.is(limitedFunction.activeCount, 1);
+	t.is(limitedFunction.pendingCount, 2);
+	t.false(limitedFunction.isIdle);
+
+	await Promise.all(promises);
+	t.is(limitedFunction.activeCount, 0);
+	t.is(limitedFunction.pendingCount, 0);
+	t.true(limitedFunction.isIdle);
+});

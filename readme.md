@@ -114,6 +114,26 @@ The number of promises that are currently running.
 
 The number of promises that are waiting to run (i.e. their internal `fn` was not called yet).
 
+### limit.isIdle
+
+Whether the limiter is idle — no promises are currently running and none are waiting to run.
+
+This is `true` when both `activeCount` and `pendingCount` are `0`, and `false` otherwise.
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(1);
+
+console.log(limit.isIdle);
+//=> true
+
+limit(() => doSomething());
+
+console.log(limit.isIdle);
+//=> false
+```
+
 ### limit.clearQueue(reason?)
 
 Discard pending promises that are waiting to run.
@@ -222,7 +242,7 @@ Default: `false`
 Reject pending promises with an `AbortError` when `clearQueue()` is called.
 This is recommended if you await the returned promises, for example with `Promise.all`, so pending tasks do not remain unresolved after `clearQueue()`.
 
-The returned function also exposes the same control and observation surface as `limit`: `.activeCount`, `.pendingCount`, `.concurrency` (get/set), `.clearQueue()`, and `.onIdle()`.
+The returned function also exposes the same control and observation surface as `limit`: `.activeCount`, `.pendingCount`, `.isIdle`, `.concurrency` (get/set), `.clearQueue()`, and `.onIdle()`.
 
 ```js
 import {limitFunction} from 'p-limit';

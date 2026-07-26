@@ -226,6 +226,11 @@ export default function pLimit(concurrency) {
 		pendingCount: {
 			get: () => queue.size,
 		},
+		isIdle: {
+			// True when nothing is running and nothing is queued. O(1): a plain read
+			// of the same counters exposed by `activeCount`/`pendingCount`.
+			get: () => activeCount === 0 && queue.size === 0,
+		},
 		clearQueue: {
 			value(reason) {
 				// Snapshot the pending count before settling — this is the return value
@@ -317,6 +322,9 @@ export function limitFunction(function_, options) {
 		},
 		pendingCount: {
 			get: () => limit.pendingCount,
+		},
+		isIdle: {
+			get: () => limit.isIdle,
 		},
 		clearQueue: {
 			value(reason) {

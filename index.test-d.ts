@@ -17,6 +17,7 @@ expectType<Promise<string>>(limit(async (_a: string, _b: number) => '', 'test', 
 
 expectType<number>(limit.activeCount);
 expectType<number>(limit.pendingCount);
+expectType<boolean>(limit.isIdle);
 
 expectType<number>(limit.clearQueue());
 expectType<number>(limitWithRejectOnClear.clearQueue());
@@ -33,6 +34,7 @@ expectType<Promise<void>>(limit.onIdle());
 // LimitFunction should require a Promise-returning function
 const lf = limitFunction(async (_a: string) => 'ok', {concurrency: 1});
 expectType<Promise<string>>(lf('input'));
+expectType<boolean>(lf.isIdle);
 expectType<Promise<void>>(lf.onIdle());
 expectType<number>(lf.clearQueue());
 expectType<number>(lf.clearQueue(new Error('reason')));

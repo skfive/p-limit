@@ -10,6 +10,13 @@ export type LimitFunction = {
 	readonly pendingCount: number;
 
 	/**
+	Whether the limiter is idle — no promises are currently running and none are waiting to run.
+
+	`true` when both `activeCount` and `pendingCount` are `0`.
+	*/
+	readonly isIdle: boolean;
+
+	/**
 	Get or set the concurrency limit.
 	*/
 	concurrency: number;
@@ -149,6 +156,13 @@ export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
 	The number of promises that are waiting to run (i.e. their internal `fn` was not called yet).
 	*/
 	readonly pendingCount: number;
+
+	/**
+	Whether the limiter is idle — no promises are currently running and none are waiting to run.
+
+	`true` when both `activeCount` and `pendingCount` are `0`.
+	*/
+	readonly isIdle: boolean;
 
 	/**
 	Get or set the concurrency limit.

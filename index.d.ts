@@ -130,7 +130,44 @@ const input = Array.from({length: 10}, limitedFunction);
 await Promise.all(input);
 ```
 */
+export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
+	/**
+	The number of promises that are currently running.
+	*/
+	readonly activeCount: number;
+
+	/**
+	The number of promises that are waiting to run (i.e. their internal `fn` was not called yet).
+	*/
+	readonly pendingCount: number;
+
+	/**
+	Get or set the concurrency limit.
+	*/
+	concurrency: number;
+
+	/**
+	Discard pending promises that are waiting to run.
+
+	This might be useful if you want to tear down the queue at the end of your program's lifecycle or discard any function calls referencing an intermediary state of your app.
+
+	Note: This does not cancel promises that are already running.
+
+	When `rejectOnClear` is enabled, pending promises are rejected with an `AbortError`.
+	This is recommended if you await the returned promises, for example with `Promise.all`, so pending tasks do not remain unresolved after `clearQueue()`.
+	*/
+	clearQueue: () => void;
+
+	/**
+	Call the limited function.
+
+	@param arguments - Arguments to pass through to the wrapped function.
+	@returns The promise returned by calling the wrapped function with `arguments`.
+	*/
+	(...arguments_: Arguments): Promise<ReturnType>;
+};
+
 export function limitFunction<Arguments extends unknown[], ReturnType>(
 	function_: (...arguments_: Arguments) => PromiseLike<ReturnType>,
 	options: Options
-): (...arguments_: Arguments) => Promise<ReturnType>;
+): LimitedFunction<Arguments, ReturnType>;

@@ -786,3 +786,226 @@ test('limitFunction() forwards arguments and keeps the existing no-this behavior
 	// `this` is intentionally not forwarded — unchanged behavior.
 	t.not(calls[0].this, context);
 });
+
+// --- onIdle() (F68F701A7A-17) ---
+
+const IDLE_PENDING = Symbol('idle-pending');
+
+// Resolves `true` if `promise` is still unresolved after `ms`, without using
+// `.then()` (xo's promise/prefer-await-to-then) or timers/flags.
+const isStillPending = async (promise, ms = 20) =>
+	(await Promise.race([promise, delay(ms, IDLE_PENDING)])) === IDLE_PENDING;
+
+test('onIdle() resolves immediately when the limiter is already idle', async t => {
+	const limit = pLimit(2);
+
+	// A freshly created limiter is idle: active/pending/in-flight map are all zero.
+	await t.notThrowsAsync(limit.onIdle());
+
+	// Calling again must still produce a fresh, resolving promise (no leak/cache).
+	const first = limit.onIdle();
+	const second = limit.onIdle();
+	t.not(first, second);
+	await t.notThrowsAsync(Promise.all([first, second]));
+});
+
+test('onIdle() waits until all active and pending tasks settle', async t => {
+	const limit = pLimit(2);
+
+	for (let index = 0; index < 5; index++) {
+		limit(async () => delay(50));
+	}
+
+	const idle = limit.onIdle();
+	t.true(await isStillPending(idle));
+	t.true(limit.activeCount + limit.pendingCount > 0);
+
+	await idle;
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+});
+
+test('onIdle() resolves all concurrent waiters at the same idle transition', async t => {
+	const limit = pLimit(1);
+
+	limit(async () => delay(40));
+	limit(async () => delay(40));
+
+	const first = limit.onIdle();
+	const second = limit.onIdle();
+	const third = limit.onIdle();
+
+	// Each call returns a distinct promise object.
+	t.not(first, second);
+	t.not(second, third);
+
+	await t.notThrowsAsync(Promise.all([first, second, third]));
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+});
+
+test('onIdle() resolves after a mapper rejects', async t => {
+	const limit = pLimit(1);
+
+	const mapped = limit.map([1, 2, 3], async value => {
+		await delay(10);
+		if (value === 2) {
+			throw new Error('boom');
+		}
+
+		return value;
+	});
+
+	await t.throwsAsync(mapped, {message: 'boom'});
+
+	// Even though the map rejected, every started task reached `next()`.
+	await t.notThrowsAsync(limit.onIdle());
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+});
+
+test('onIdle() resolves after a synchronous throw', async t => {
+	const limit = pLimit(1);
+
+	await t.throwsAsync(limit(() => {
+		throw new Error('sync');
+	}), {message: 'sync'});
+
+	await t.notThrowsAsync(limit.onIdle());
+});
+
+test('onIdle() resolves after clearQueue() discards pending (rejectOnClear: false)', async t => {
+	const limit = pLimit(1);
+
+	limit(async () => delay(50)); // Active
+	limit(async () => delay(50)); // Pending
+	limit(async () => delay(50)); // Pending
+
+	const idle = limit.onIdle();
+	limit.clearQueue();
+	t.is(limit.pendingCount, 0);
+
+	// One active task still remains — not idle yet.
+	t.true(await isStillPending(idle));
+
+	await idle;
+	t.is(limit.activeCount, 0);
+});
+
+test('onIdle() resolves after clearQueue() rejects pending (rejectOnClear: true)', async t => {
+	const limit = pLimit({concurrency: 1, rejectOnClear: true});
+
+	const active = limit(async () => delay(50));
+	const pending = limit(async () => delay(50));
+
+	const idle = limit.onIdle();
+	limit.clearQueue();
+
+	await t.throwsAsync(pending);
+
+	// The remaining active task is unaffected — still not idle.
+	t.true(await isStillPending(idle, 15));
+
+	await active;
+	await idle;
+	t.is(limit.activeCount, 0);
+});
+
+test('onIdle() is not resolved early by a concurrency change', async t => {
+	const limit = pLimit(1);
+
+	for (let index = 0; index < 4; index++) {
+		limit(async () => delay(50));
+	}
+
+	const idle = limit.onIdle();
+	limit.concurrency = 4;
+
+	// Raising concurrency only promotes pending → active; it must not trigger idle.
+	t.true(await isStillPending(idle));
+
+	await idle;
+	t.is(limit.activeCount, 0);
+});
+
+test('onIdle() works after the limiter has gone idle and is reused', async t => {
+	const limit = pLimit(1);
+
+	await limit(async () => delay(10));
+	await limit.onIdle(); // Idle now
+
+	limit(async () => delay(50));
+	const idle = limit.onIdle();
+	t.true(await isStillPending(idle));
+
+	await idle;
+	t.is(limit.activeCount, 0);
+});
+
+test('onIdle() does not resolve early while an async-iterable map is in progress', async t => {
+	const limit = pLimit(1);
+
+	async function * source() {
+		yield * [0, 1, 2, 3, 4];
+	}
+
+	const mapped = limit.map(source(), async value => {
+		await delay(20);
+		return value;
+	});
+
+	const idle = limit.onIdle();
+
+	// While the lazy map is still drawing, `activeCount` can momentarily hit 0
+	// between a draw settling and the next draw, but `mapSchedulers` keeps the
+	// limiter non-idle. ~5 items × 20ms ≫ 60ms sampling window.
+	t.true(await isStillPending(idle, 60));
+
+	await mapped;
+	await idle;
+	t.is(limit.activeCount, 0);
+});
+
+test('onIdle() waits for all concurrent async-iterable maps to settle', async t => {
+	const limit = pLimit(2);
+
+	async function * source(values) {
+		yield * values;
+	}
+
+	const a = limit.map(source([0, 1, 2]), async value => {
+		await delay(10);
+		return value;
+	});
+	const b = limit.map(source([0, 1, 2, 3, 4, 5, 6, 7]), async value => {
+		await delay(20);
+		return value;
+	});
+
+	const idle = limit.onIdle();
+
+	await a;
+	// `a` is done but `b` is still in flight — still not idle.
+	t.true(await isStillPending(idle, 10));
+
+	await b;
+	await idle;
+	t.is(limit.activeCount, 0);
+});
+
+test('limitFunction() exposes onIdle() delegating to the underlying limiter', async t => {
+	const limitedFunction = limitFunction(async () => delay(50), {concurrency: 1});
+
+	// Immediate idle before any call.
+	await t.notThrowsAsync(limitedFunction.onIdle());
+
+	limitedFunction();
+	limitedFunction();
+
+	const idle = limitedFunction.onIdle();
+	t.true(await isStillPending(idle));
+
+	await idle;
+	t.is(limitedFunction.activeCount, 0);
+	t.is(limitedFunction.pendingCount, 0);
+});

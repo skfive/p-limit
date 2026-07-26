@@ -45,6 +45,13 @@ export type LimitFunction = {
 	) => Promise<ReturnType[]>;
 
 	/**
+	Returns a promise that resolves when the limiter becomes idle — no promises are currently running and none are waiting to run.
+
+	If the limiter is already idle when this is called, the returned promise resolves immediately.
+	*/
+	onIdle: () => Promise<void>;
+
+	/**
 	@param fn - Promise-returning/async function.
 	@param arguments - Any arguments to pass through to `fn`. Support for passing arguments on to the `fn` is provided in order to be able to avoid creating unnecessary closures. You probably don't need this optimization unless you're pushing a *lot* of functions.
 
@@ -159,6 +166,13 @@ export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
 	This is recommended if you await the returned promises, for example with `Promise.all`, so pending tasks do not remain unresolved after `clearQueue()`.
 	*/
 	clearQueue: () => void;
+
+	/**
+	Returns a promise that resolves when the limiter becomes idle — no promises are currently running and none are waiting to run.
+
+	If the limiter is already idle when this is called, the returned promise resolves immediately.
+	*/
+	onIdle: () => Promise<void>;
 
 	/**
 	Call the limited function.

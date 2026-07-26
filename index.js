@@ -20,6 +20,29 @@ export default function pLimit(concurrency) {
 	// so a raised limit promotes additional draws (mirrors the queue promotion below).
 	const mapSchedulers = new Set();
 
+	// Resolve callbacks for outstanding `onIdle()` calls awaiting the idle state.
+	const idleWaiters = new Set();
+
+	// The limiter is idle when nothing is running, nothing is queued, and no lazy
+	// `limit.map()` is still drawing. The `mapSchedulers` check prevents a false
+	// positive during the gap between a map draw settling and the next draw.
+	const isIdle = () => activeCount === 0 && queue.size === 0 && mapSchedulers.size === 0;
+
+	// Broadcast to all outstanding `onIdle()` waiters when (and only when) the
+	// limiter has actually reached the idle state, then clear them so each resolve
+	// fires exactly once (no leak, no double-fire on later reuse).
+	const notifyIdle = () => {
+		if (idleWaiters.size === 0 || !isIdle()) {
+			return;
+		}
+
+		for (const resolve of idleWaiters) {
+			resolve();
+		}
+
+		idleWaiters.clear();
+	};
+
 	const resumeNext = () => {
 		// Process the next queued function if we're under the concurrency limit
 		if (activeCount < concurrency && queue.size > 0) {
@@ -31,6 +54,7 @@ export default function pLimit(concurrency) {
 	const next = () => {
 		activeCount--;
 		resumeNext();
+		notifyIdle();
 	};
 
 	const run = async (function_, resolve, arguments_) => {
@@ -95,12 +119,14 @@ export default function pLimit(concurrency) {
 			}
 
 			reject(error);
+			notifyIdle();
 		};
 
 		const settleResolve = () => {
 			settled = true;
 			mapSchedulers.delete(schedule);
 			resolve(results);
+			notifyIdle();
 		};
 
 		const onTaskDone = () => {
@@ -204,6 +230,7 @@ export default function pLimit(concurrency) {
 			value() {
 				if (!rejectOnClear) {
 					queue.clear();
+					notifyIdle();
 					return;
 				}
 
@@ -212,6 +239,19 @@ export default function pLimit(concurrency) {
 				while (queue.size > 0) {
 					queue.dequeue().reject(abortError);
 				}
+
+				notifyIdle();
+			},
+		},
+		onIdle: {
+			value() {
+				if (isIdle()) {
+					return Promise.resolve();
+				}
+
+				return new Promise(resolve => {
+					idleWaiters.add(resolve);
+				});
 			},
 		},
 		concurrency: {
@@ -269,6 +309,11 @@ export function limitFunction(function_, options) {
 		clearQueue: {
 			value() {
 				limit.clearQueue();
+			},
+		},
+		onIdle: {
+			value() {
+				return limit.onIdle();
 			},
 		},
 		concurrency: {

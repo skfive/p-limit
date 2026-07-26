@@ -254,6 +254,198 @@ testClearQueueRejects('clearQueue rejects pending map tasks with AbortError and 
 	t.is(limit.pendingCount, 0);
 });
 
+test('clearQueue returns the number of removed pending items and leaves active work untouched', async t => {
+	const limit = pLimit(1);
+
+	limit(() => delay(1000)); // Active
+	Array.from({length: 3}, () => limit(() => delay(1000))); // Pending
+
+	await Promise.resolve();
+	t.is(limit.activeCount, 1);
+	t.is(limit.pendingCount, 3);
+
+	const removed = limit.clearQueue();
+	t.is(removed, 3);
+	t.is(limit.pendingCount, 0);
+	// The active task is unaffected.
+	t.is(limit.activeCount, 1);
+});
+
+test('clearQueue returns 0 when the queue is empty (no pending, active present)', async t => {
+	const limit = pLimit(1);
+
+	limit(() => delay(50)); // Active only
+
+	await Promise.resolve();
+	t.is(limit.activeCount, 1);
+	t.is(limit.pendingCount, 0);
+
+	t.is(limit.clearQueue(), 0);
+	t.is(limit.activeCount, 1);
+});
+
+test('clearQueue returns 0 on repeat calls after the queue is already emptied', async t => {
+	const limit = pLimit(1);
+
+	limit(() => delay(1000)); // Active
+	Array.from({length: 2}, () => limit(() => delay(1000))); // Pending
+
+	await Promise.resolve();
+	t.is(limit.pendingCount, 2);
+
+	t.is(limit.clearQueue(), 2);
+	t.is(limit.clearQueue(), 0);
+});
+
+test('clearQueue(reason) rejects pending promises with the given Error even when rejectOnClear is false', async t => {
+	const limit = pLimit(1);
+	const reason = new Error('boom');
+
+	limit(() => delay(100)); // Active
+	const pendingOne = limit(() => delay(10));
+	const pendingTwo = limit(() => delay(10));
+
+	await Promise.resolve();
+	t.is(limit.pendingCount, 2);
+
+	const removed = limit.clearQueue(reason);
+	t.is(removed, 2);
+	t.is(limit.pendingCount, 0);
+
+	await t.throwsAsync(pendingOne, {is: reason});
+	await t.throwsAsync(pendingTwo, {is: reason});
+});
+
+test('clearQueue(reason) rejects with a string reason as-is (no Error wrapping)', async t => {
+	const limit = pLimit(1);
+
+	limit(() => delay(100)); // Active
+	const pending = limit(() => delay(10));
+
+	await Promise.resolve();
+	t.is(limit.pendingCount, 1);
+
+	t.is(limit.clearQueue('nope'), 1);
+
+	await t.notThrowsAsync((async () => {
+		try {
+			await pending;
+			t.fail('pending promise should have rejected');
+		} catch (error) {
+			t.is(error, 'nope'); // Rejected with the string value as-is, not wrapped in an Error.
+		}
+	})());
+});
+
+test('clearQueue(reason) rejects with a non-Error reason value passed through unchanged', async t => {
+	const limit = pLimit(1);
+	const reason = {code: 'CANCELLED'};
+
+	limit(() => delay(100)); // Active
+	const pending = limit(() => delay(10));
+
+	await Promise.resolve();
+	t.is(limit.pendingCount, 1);
+
+	limit.clearQueue(reason);
+
+	await t.notThrowsAsync((async () => {
+		try {
+			await pending;
+			t.fail('pending promise should have rejected');
+		} catch (error) {
+			t.is(error, reason);
+		}
+	})());
+});
+
+test('clearQueue(reason) overrides the default AbortError when rejectOnClear is true', async t => {
+	const limit = pLimit({concurrency: 1, rejectOnClear: true});
+	const reason = new Error('explicit');
+
+	limit(() => delay(100)); // Active
+	const pending = limit(() => delay(10));
+
+	await Promise.resolve();
+	t.is(limit.pendingCount, 1);
+
+	t.is(limit.clearQueue(reason), 1);
+
+	await t.throwsAsync(pending, {is: reason});
+});
+
+test('clearQueue(null) treats null as a specified reason (not "unspecified")', async t => {
+	const limit = pLimit(1);
+
+	limit(() => delay(100)); // Active
+	const pending = limit(() => delay(10));
+
+	await Promise.resolve();
+	t.is(limit.pendingCount, 1);
+
+	t.is(limit.clearQueue(null), 1);
+
+	await t.notThrowsAsync((async () => {
+		try {
+			await pending;
+			t.fail('pending promise should have rejected');
+		} catch (error) {
+			t.is(error, null);
+		}
+	})());
+});
+
+test('clearQueue(falsy reason) treats falsy values as specified reasons', async t => {
+	const limit = pLimit(1);
+
+	limit(() => delay(100)); // Active
+	const pending = limit(() => delay(10));
+
+	await Promise.resolve();
+	t.is(limit.pendingCount, 1);
+
+	t.is(limit.clearQueue(0), 1);
+
+	await t.notThrowsAsync((async () => {
+		try {
+			await pending;
+			t.fail('pending promise should have rejected');
+		} catch (error) {
+			t.is(error, 0);
+		}
+	})());
+});
+
+test('limitFunction() clearQueue returns the removed count delegated from the underlying limiter', async t => {
+	const limitedFunction = limitFunction(() => delay(1000), {concurrency: 1});
+
+	limitedFunction(); // Active
+	limitedFunction();
+	limitedFunction();
+
+	await Promise.resolve();
+	t.is(limitedFunction.pendingCount, 2);
+
+	t.is(limitedFunction.clearQueue(), 2);
+	t.is(limitedFunction.pendingCount, 0);
+	t.is(limitedFunction.activeCount, 1);
+});
+
+test('limitFunction() clearQueue(reason) delegates the reason to the underlying limiter', async t => {
+	const limitedFunction = limitFunction(() => delay(100), {concurrency: 1});
+	const reason = new Error('delegated');
+
+	limitedFunction(); // Active
+	const pending = limitedFunction();
+
+	await Promise.resolve();
+	t.is(limitedFunction.pendingCount, 1);
+
+	t.is(limitedFunction.clearQueue(reason), 1);
+
+	await t.throwsAsync(pending, {is: reason});
+});
+
 test('map', async t => {
 	const limit = pLimit(1);
 	const results = await limit.map([1, 2, 3, 4, 5, 6, 7], input => input + 1);

@@ -227,20 +227,32 @@ export default function pLimit(concurrency) {
 			get: () => queue.size,
 		},
 		clearQueue: {
-			value() {
-				if (!rejectOnClear) {
-					queue.clear();
-					notifyIdle();
-					return;
-				}
+			value(reason) {
+				// Snapshot the pending count before settling — this is the return value
+				// regardless of how the items are settled below.
+				const removedCount = queue.size;
 
-				const abortError = AbortSignal.abort().reason;
+				if (reason === undefined) {
+					// Unspecified reason: fall back to the constructor's `rejectOnClear`.
+					if (rejectOnClear) {
+						const abortError = AbortSignal.abort().reason;
 
-				while (queue.size > 0) {
-					queue.dequeue().reject(abortError);
+						while (queue.size > 0) {
+							queue.dequeue().reject(abortError);
+						}
+					} else {
+						queue.clear();
+					}
+				} else {
+					// A specified reason (including `null`/falsy values) overrides
+					// `rejectOnClear` and rejects every pending promise with it verbatim.
+					while (queue.size > 0) {
+						queue.dequeue().reject(reason);
+					}
 				}
 
 				notifyIdle();
+				return removedCount;
 			},
 		},
 		onIdle: {
@@ -307,8 +319,8 @@ export function limitFunction(function_, options) {
 			get: () => limit.pendingCount,
 		},
 		clearQueue: {
-			value() {
-				limit.clearQueue();
+			value(reason) {
+				return limit.clearQueue(reason);
 			},
 		},
 		onIdle: {

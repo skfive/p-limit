@@ -117,7 +117,32 @@ export default function pLimit(concurrency) {
 export function limitFunction(function_, options) {
 	const limit = pLimit(options);
 
-	return (...arguments_) => limit(() => function_(...arguments_));
+	const limitedFunction = (...arguments_) => limit(() => function_(...arguments_));
+
+	// Expose the same observation/control surface as the underlying `pLimit`
+	// instance by delegating to it — no scheduling logic is duplicated.
+	Object.defineProperties(limitedFunction, {
+		activeCount: {
+			get: () => limit.activeCount,
+		},
+		pendingCount: {
+			get: () => limit.pendingCount,
+		},
+		clearQueue: {
+			value() {
+				limit.clearQueue();
+			},
+		},
+		concurrency: {
+			get: () => limit.concurrency,
+
+			set(newConcurrency) {
+				limit.concurrency = newConcurrency;
+			},
+		},
+	});
+
+	return limitedFunction;
 }
 
 function validateConcurrency(concurrency) {

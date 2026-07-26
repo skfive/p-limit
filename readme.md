@@ -154,6 +154,31 @@ Default: `false`
 Reject pending promises with an `AbortError` when `clearQueue()` is called.
 This is recommended if you await the returned promises, for example with `Promise.all`, so pending tasks do not remain unresolved after `clearQueue()`.
 
+The returned function also exposes the same control and observation surface as `limit`: `.activeCount`, `.pendingCount`, `.concurrency` (get/set), and `.clearQueue()`.
+
+```js
+import {limitFunction} from 'p-limit';
+
+const limitedFunction = limitFunction(async () => {
+	return doSomething();
+}, {concurrency: 2});
+
+const promises = Array.from({length: 5}, limitedFunction);
+
+console.log(limitedFunction.activeCount);
+//=> 2
+console.log(limitedFunction.pendingCount);
+//=> 3
+
+// Raise the limit; queued calls are promoted up to the new limit.
+limitedFunction.concurrency = 4;
+
+// Discard any calls still waiting to run.
+limitedFunction.clearQueue();
+
+await Promise.allSettled(promises);
+```
+
 ## Recipes
 
 See [recipes.md](recipes.md) for common use cases and patterns.

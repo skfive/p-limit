@@ -492,3 +492,125 @@ test('limitFunction()', async t => {
 
 	await Promise.all(input);
 });
+
+test('limitFunction() reports accurate activeCount and pendingCount', async t => {
+	const limitedFunction = limitFunction(() => delay(50), {concurrency: 2});
+
+	t.is(limitedFunction.activeCount, 0);
+	t.is(limitedFunction.pendingCount, 0);
+
+	// Two run immediately, the remaining three wait in the queue.
+	const promises = Array.from({length: 5}, () => limitedFunction());
+
+	t.is(limitedFunction.activeCount, 2);
+	t.is(limitedFunction.pendingCount, 3);
+
+	await Promise.all(promises);
+
+	t.is(limitedFunction.activeCount, 0);
+	t.is(limitedFunction.pendingCount, 0);
+});
+
+test('limitFunction() applies a raised concurrency to already-queued work', async t => {
+	const limitedFunction = limitFunction(() => delay(50), {concurrency: 2});
+
+	const promises = Array.from({length: 6}, () => limitedFunction());
+	t.is(limitedFunction.activeCount, 2);
+	t.is(limitedFunction.pendingCount, 4);
+
+	limitedFunction.concurrency = 4;
+	t.is(limitedFunction.concurrency, 4);
+
+	// Promotion of queued work happens in a microtask.
+	await delay(0);
+	t.is(limitedFunction.activeCount, 4);
+	t.is(limitedFunction.pendingCount, 2);
+
+	await Promise.all(promises);
+	t.is(limitedFunction.activeCount, 0);
+	t.is(limitedFunction.pendingCount, 0);
+});
+
+test('limitFunction() concurrency getter/setter validates input and keeps the old value on error', t => {
+	const limitedFunction = limitFunction(async () => {}, {concurrency: 3});
+
+	t.is(limitedFunction.concurrency, 3);
+
+	limitedFunction.concurrency = 5;
+	t.is(limitedFunction.concurrency, 5);
+
+	t.throws(() => {
+		limitedFunction.concurrency = 0;
+	});
+
+	// An invalid assignment must leave the previous value intact.
+	t.is(limitedFunction.concurrency, 5);
+});
+
+test('limitFunction() clearQueue discards pending calls but keeps active ones', async t => {
+	const limitedFunction = limitFunction(() => delay(1000), {concurrency: 1});
+
+	limitedFunction();
+	limitedFunction();
+	limitedFunction();
+
+	await Promise.resolve();
+	t.is(limitedFunction.activeCount, 1);
+	t.is(limitedFunction.pendingCount, 2);
+
+	limitedFunction.clearQueue();
+	t.is(limitedFunction.pendingCount, 0);
+	t.is(limitedFunction.activeCount, 1);
+});
+
+testClearQueueRejects('limitFunction() clearQueue rejects pending calls when rejectOnClear is enabled', async t => {
+	const limitedFunction = limitFunction(() => delay(100), {concurrency: 1, rejectOnClear: true});
+
+	const runningPromise = limitedFunction();
+	const pendingPromiseOne = limitedFunction();
+	const pendingPromiseTwo = limitedFunction();
+
+	await Promise.resolve();
+	t.is(limitedFunction.activeCount, 1);
+	t.is(limitedFunction.pendingCount, 2);
+
+	limitedFunction.clearQueue();
+	t.is(limitedFunction.pendingCount, 0);
+	t.is(limitedFunction.activeCount, 1);
+
+	await runningPromise;
+	await t.throwsAsync(pendingPromiseOne, {name: 'AbortError'});
+	await t.throwsAsync(pendingPromiseTwo, {name: 'AbortError'});
+
+	t.is(limitedFunction.activeCount, 0);
+	t.is(limitedFunction.pendingCount, 0);
+});
+
+test('limitFunction() preserves FIFO execution order', async t => {
+	const started = [];
+	const limitedFunction = limitFunction(async value => {
+		started.push(value);
+		await delay(10);
+		return value;
+	}, {concurrency: 1});
+
+	const results = await Promise.all([1, 2, 3, 4].map(value => limitedFunction(value)));
+
+	t.deepEqual(results, [1, 2, 3, 4]);
+	t.deepEqual(started, [1, 2, 3, 4]);
+});
+
+test('limitFunction() forwards arguments and keeps the existing no-this behavior', async t => {
+	const calls = [];
+	const context = {id: 'ctx'};
+
+	const limitedFunction = limitFunction(function (a, b, c) {
+		calls.push({arguments_: [a, b, c], this: this});
+	}, {concurrency: 1});
+
+	await limitedFunction.call(context, 1, 2, 3);
+
+	t.deepEqual(calls[0].arguments_, [1, 2, 3]);
+	// `this` is intentionally not forwarded — unchanged behavior.
+	t.not(calls[0].this, context);
+});

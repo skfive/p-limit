@@ -266,6 +266,11 @@ export default function pLimit(concurrency) {
 				});
 			},
 		},
+		isIdle: {
+			// O(1) read of the same idle predicate `onIdle()` waits for: nothing
+			// running, nothing queued, no lazy `limit.map()` still drawing.
+			get: () => isIdle(),
+		},
 		concurrency: {
 			get: () => concurrency,
 
@@ -327,6 +332,9 @@ export function limitFunction(function_, options) {
 			value() {
 				return limit.onIdle();
 			},
+		},
+		isIdle: {
+			get: () => limit.isIdle,
 		},
 		concurrency: {
 			get: () => limit.concurrency,

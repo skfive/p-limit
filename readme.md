@@ -114,16 +114,41 @@ The number of promises that are currently running.
 
 The number of promises that are waiting to run (i.e. their internal `fn` was not called yet).
 
-### limit.clearQueue()
+### limit.clearQueue(reason?)
 
 Discard pending promises that are waiting to run.
+
+Returns the number of pending promises that were removed from the queue. Promises that are already running are never counted or affected.
 
 This might be useful if you want to tear down the queue at the end of your program's lifecycle or discard any function calls referencing an intermediary state of your app.
 
 Note: This does not cancel promises that are already running.
 
-When `rejectOnClear` is enabled, pending promises are rejected with an `AbortError`.
-This is recommended if you await the returned promises, for example with `Promise.all`, so pending tasks do not remain unresolved after `clearQueue()`.
+#### reason
+
+Type: `unknown`\
+Optional.
+
+Value to reject the discarded pending promises with.
+
+When a `reason` is provided (anything other than `undefined` — including `null` and other falsy values), every pending promise is rejected with that value as-is, regardless of the `rejectOnClear` option:
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(1);
+
+const running = limit(() => doSomething());
+const pending = limit(() => doSomethingElse());
+
+// Rejects `pending` with the given reason and returns the number removed.
+const removed = limit.clearQueue(new Error('Cancelled'));
+//=> 1
+```
+
+When `reason` is omitted, the `rejectOnClear` option decides the behavior: if enabled, pending promises are rejected with an `AbortError`; otherwise they are discarded without settling.
+
+Awaiting the returned promises (for example with `Promise.all`) is recommended when you reject on clear, so pending tasks do not remain unresolved after `clearQueue()`.
 
 ### limit.concurrency
 

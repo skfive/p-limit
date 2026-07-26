@@ -18,8 +18,15 @@ expectType<Promise<string>>(limit(async (_a: string, _b: number) => '', 'test', 
 expectType<number>(limit.activeCount);
 expectType<number>(limit.pendingCount);
 
-expectType<void>(limit.clearQueue());
-expectType<void>(limitWithRejectOnClear.clearQueue());
+expectType<number>(limit.clearQueue());
+expectType<number>(limitWithRejectOnClear.clearQueue());
+
+// `clearQueue` accepts an optional `reason` of any type and returns the removed count.
+expectType<number>(limit.clearQueue(new Error('reason')));
+expectType<number>(limit.clearQueue('reason'));
+expectType<number>(limit.clearQueue({code: 'CANCELLED'}));
+expectType<number>(limit.clearQueue(null));
+expectType<number>(limit.clearQueue(undefined));
 
 expectType<Promise<void>>(limit.onIdle());
 
@@ -27,6 +34,8 @@ expectType<Promise<void>>(limit.onIdle());
 const lf = limitFunction(async (_a: string) => 'ok', {concurrency: 1});
 expectType<Promise<string>>(lf('input'));
 expectType<Promise<void>>(lf.onIdle());
+expectType<number>(lf.clearQueue());
+expectType<number>(lf.clearQueue(new Error('reason')));
 
 expectError(limitFunction((_a: string) => 'x', {concurrency: 1}));
 expectError(pLimit({concurrency: 1, rejectOnClear: 'nope'}));

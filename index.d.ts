@@ -21,10 +21,10 @@ export type LimitFunction = {
 
 	Note: This does not cancel promises that are already running.
 
-	When `rejectOnClear` is enabled, pending promises are rejected with an `AbortError`.
-	This is recommended if you await the returned promises, for example with `Promise.all`, so pending tasks do not remain unresolved after `clearQueue()`.
+	@param reason - Value to reject the discarded pending promises with. When provided (anything other than `undefined`, including `null` and other falsy values), every pending promise is rejected with this value verbatim, regardless of the `rejectOnClear` option. When omitted, the `rejectOnClear` option decides the behavior: if enabled, pending promises are rejected with an `AbortError`; otherwise they are discarded without settling.
+	@returns The number of pending promises that were removed from the queue. Already-running promises are never counted or affected.
 	*/
-	clearQueue: () => void;
+	clearQueue: (reason?: unknown) => number;
 
 	/**
 	Process an iterable or async iterable of inputs with limited concurrency.
@@ -162,10 +162,10 @@ export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
 
 	Note: This does not cancel promises that are already running.
 
-	When `rejectOnClear` is enabled, pending promises are rejected with an `AbortError`.
-	This is recommended if you await the returned promises, for example with `Promise.all`, so pending tasks do not remain unresolved after `clearQueue()`.
+	@param reason - Value to reject the discarded pending promises with. When provided (anything other than `undefined`, including `null` and other falsy values), every pending promise is rejected with this value verbatim, regardless of the `rejectOnClear` option. When omitted, the `rejectOnClear` option decides the behavior: if enabled, pending promises are rejected with an `AbortError`; otherwise they are discarded without settling.
+	@returns The number of pending promises that were removed from the queue. Already-running promises are never counted or affected.
 	*/
-	clearQueue: () => void;
+	clearQueue: (reason?: unknown) => number;
 
 	/**
 	Returns a promise that resolves when the limiter becomes idle — no promises are currently running and none are waiting to run.

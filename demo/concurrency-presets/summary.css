@@ -1,0 +1,76 @@
+/*
+ * 성능 요약 UI 스타일 (F68F701A7A-113)
+ *
+ * planner frozen contract(docs/plans/perf-summary-F68F701A7A-111.md §6·§8) 준수.
+ * - additive only: 기존 styles.css 의 selector/token 을 변경·재정의하지 않는다.
+ * - design token 은 §6 의 exact value 로 정의한다(값 override 금지).
+ * - 반응형(§8): 320px 이상 세로 스택, 480px 이상 가로 정렬, overflow 없음.
+ */
+
+.perf-summary {
+	/* §6 동결 design token (exact value) */
+	--perf-summary-gap: 12px;
+	--perf-card-bg: #f8fafc;
+	--perf-card-accent: #2563eb;
+	--perf-card-radius: 8px;
+	--perf-card-text: #0f172a;
+
+	display: flex;
+	flex-direction: column;
+	gap: var(--perf-summary-gap);
+	margin-top: var(--perf-summary-gap);
+}
+
+.perf-summary__status {
+	margin: 0;
+	font-weight: 600;
+	color: var(--perf-card-text);
+}
+
+.perf-summary__cards {
+	display: flex;
+	/* §8: 320px 이상 기본은 세로 스택 — overflow 없이 아래로 쌓인다. */
+	flex-direction: column;
+	gap: var(--perf-summary-gap);
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.perf-card {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	box-sizing: border-box;
+	min-width: 0; /* 좁은 폭에서 content overflow 방지. */
+	padding: var(--perf-summary-gap);
+	background: var(--perf-card-bg);
+	border-radius: var(--perf-card-radius);
+	border-left: 4px solid var(--perf-card-accent);
+	color: var(--perf-card-text);
+}
+
+.perf-card__label {
+	font-weight: 600;
+}
+
+.perf-card__time {
+	font-variant-numeric: tabular-nums;
+}
+
+.perf-card__speedup {
+	/* 배수는 강조색으로 보이되, 텍스트(×배수)로도 노출해 색상 단독 의존을 피한다(§7). */
+	font-weight: 600;
+	color: var(--perf-card-accent);
+}
+
+/* §8: 480px 이상에서 카드를 가로 정렬. 각 카드가 균등 폭으로 늘어나며 overflow 없음. */
+@media (min-width: 480px) {
+	.perf-summary__cards {
+		flex-direction: row;
+	}
+
+	.perf-card {
+		flex: 1 1 0;
+	}
+}

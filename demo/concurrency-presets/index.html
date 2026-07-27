@@ -20,6 +20,7 @@
 	</script>
 
 	<link rel="stylesheet" href="styles.css">
+	<link rel="stylesheet" href="summary.css">
 </head>
 <body>
 	<main id="concurrency-presets-root" class="concurrency-presets" data-state="idle">
@@ -50,8 +51,34 @@
 		</div>
 
 		<p class="concurrency-presets__status" role="status" aria-live="polite"></p>
+
+		<!--
+			성능 요약 UI (F68F701A7A-113) — 기존 실행/초기화/타임라인 계약 위에 additive 로
+			얹는 요약 region. selector/ID/token 은 frozen ui-contract 를 그대로 따른다.
+		-->
+		<section id="perf-summary" class="perf-summary" aria-live="polite">
+			<p id="perf-summary-status" class="perf-summary__status"></p>
+			<div id="perf-summary-cards" class="perf-summary__cards">
+				<article id="perf-card-c1" class="perf-card">
+					<span class="perf-card__label">동시성 1</span>
+					<span class="perf-card__time">—</span>
+					<span class="perf-card__speedup">—</span>
+				</article>
+				<article id="perf-card-c2" class="perf-card">
+					<span class="perf-card__label">동시성 2</span>
+					<span class="perf-card__time">—</span>
+					<span class="perf-card__speedup">—</span>
+				</article>
+				<article id="perf-card-c4" class="perf-card">
+					<span class="perf-card__label">동시성 4</span>
+					<span class="perf-card__time">—</span>
+					<span class="perf-card__speedup">—</span>
+				</article>
+			</div>
+		</section>
 	</main>
 
 	<script type="module" src="main.js"></script>
+	<script type="module" src="summary.js"></script>
 </body>
 </html>

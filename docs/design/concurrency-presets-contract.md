@@ -11,6 +11,15 @@
 - stack: **vanilla-static** (외부 의존성 0건 · system font · CSS 변수 자체 정의)
 - mockup 참조: [`docs/design/mockups/concurrency-presets-F68F701A7A-46.html`](./mockups/concurrency-presets-F68F701A7A-46.html)
 
+> ### ⚠️ `styles.css` 파일 생성 책임 (리뷰 F68F701A7A-46 conditional 대응)
+> plan §4 파일 트리는 `demo/concurrency-presets/styles.css`를 "designer, 7절"로 표기했으나,
+> designer 페르소나는 **실제 앱 코드를 구현하지 않으며**(산출물 = 디자인 명세 + mockup),
+> 이 작업의 owned_paths도 `docs/design/**`로 한정되고 `demo/concurrency-presets/**`는 **read-only**다.
+> 따라서 **물리적 `demo/concurrency-presets/styles.css` 파일 생성은 developer(F68F701A7A-47)의 소관**이며,
+> designer는 그 **전문(全文)을 아래 §6.8에 그대로 저장 가능한 형태로 동결 제공**한다.
+> developer는 §6.8 코드 블록을 **그대로 `demo/concurrency-presets/styles.css`로 저장**하면
+> `index.html`의 `<link rel="stylesheet" href="styles.css">`가 해소되고 frozen design token이 즉시 적용된다.
+
 ## 1. 시안 개요
 
 ### 변경 범위
@@ -198,6 +207,173 @@ modifier만 교체한다.
 
 > 픽셀 단위 일치 의무 없음 — mockup은 시각 의도 전달용. 위 token 값과 상태 규칙만 지키면 된다.
 
+### 6.8 완성형 `styles.css` (그대로 저장 — 리뷰 F68F701A7A-46 대응)
+
+아래 블록은 위 §2~§5 명세를 100% 반영한 **완성형 스타일시트 전문**이다. developer(F68F701A7A-47)는
+이 블록을 **가감 없이 `demo/concurrency-presets/styles.css`로 저장**하면 `index.html`의 스타일시트
+참조 404가 해소되고 frozen design token 4종이 즉시 적용된다. frozen selector·token 이름은 계약 6~7절
+그대로이며 임의 변경 금지. (값 조정이 필요하면 이 문서를 먼저 갱신)
+
+```css
+/* demo/concurrency-presets/styles.css
+ * 동시성 프리셋 비교 패널 — 시각 스타일 (F68F701A7A-46 design contract §2~§5 구현)
+ * vanilla-static: 외부 의존성 0건 · system font · CSS 변수 자체 정의 */
+
+:root {
+  /* frozen design token (계약 7절 — 이름 고정) */
+  --color-status-waiting: #cbd5e1;
+  --color-status-running: #f59e0b;
+  --color-status-complete: #15803d;
+  --space-panel-gap: 1rem;
+
+  /* 보조 팔레트 (계약에 이름 고정 아님 — 로컬 변수) */
+  --c-bg: #f8fafc;
+  --c-surface: #ffffff;
+  --c-border: #e2e8f0;
+  --c-text: #0f172a;
+  --c-text-muted: #64748b;
+  --c-primary: #2563eb;
+  --c-primary-hover: #1d4ed8;
+
+  /* 상태별 전경색 (§2.1 대비 검증 완료) */
+  --c-on-waiting: #334155;
+  --c-on-running: #1f2937;
+  --c-on-complete: #ffffff;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--c-text);
+  background: var(--c-bg);
+  line-height: 1.5;
+}
+
+/* 루트 컨테이너 (§5.1) */
+.concurrency-presets {
+  padding: 1rem;
+  background: var(--c-bg);
+}
+@media (min-width: 720px) {
+  .concurrency-presets { padding: 1.5rem; }
+}
+
+.concurrency-presets > header { margin-bottom: 1rem; }
+.concurrency-presets h1 {
+  font-size: 1.5rem; font-weight: 700; line-height: 1.3; margin: 0 0 0.25rem;
+}
+.concurrency-presets header p {
+  font-size: 0.8125rem; color: var(--c-text-muted); margin: 0;
+}
+
+/* 컨트롤 행 (§5.2) */
+.concurrency-presets__controls {
+  display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap;
+}
+#preset-run,
+#preset-reset {
+  min-height: 44px; min-width: 44px;
+  padding: 0.5rem 1.25rem;
+  font: 600 0.875rem/1 var(--font-sans);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+#preset-run {
+  background: var(--c-primary); color: #fff; border: 1px solid var(--c-primary);
+}
+#preset-run:hover { background: var(--c-primary-hover); border-color: var(--c-primary-hover); }
+#preset-run:disabled { opacity: 0.5; cursor: not-allowed; }
+#preset-reset {
+  background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-border);
+}
+#preset-reset:hover { background: #f1f5f9; }
+#preset-run:focus-visible,
+#preset-reset:focus-visible {
+  outline: 2px solid var(--c-primary); outline-offset: 2px;
+}
+
+/* 상태 안내 region (§5.3) */
+.concurrency-presets__status {
+  font-size: 0.8125rem; color: var(--c-text-muted); margin-bottom: 1rem; min-height: 1.25rem;
+}
+
+/* 반응형 비교 영역 (§4.3 · 계약 8.2 frozen breakpoint) */
+.concurrency-presets__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-panel-gap);
+}
+@media (min-width: 720px) {
+  .concurrency-presets__panel { flex-direction: row; }
+  .concurrency-presets__preset { flex: 1 1 0; }
+}
+
+/* 개별 프리셋 패널 (§5.4) */
+.concurrency-presets__preset {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem 1rem;
+  min-width: 0; /* 320px 가로 스크롤 방지 */
+}
+.concurrency-presets__preset > h2,
+.concurrency-presets__preset > h3 {
+  font-size: 1rem; font-weight: 600; line-height: 1.4; margin: 0 0 0.75rem;
+}
+.concurrency-presets__preset .count { font-family: var(--font-mono); font-weight: 600; }
+
+/* 타임라인 항목 base + 상태 modifier (§5.5 · 계약 6.2 frozen) */
+.concurrency-presets__item {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: 6px;
+  border-left: 4px solid transparent;
+  font-size: 0.875rem; font-weight: 500;
+  overflow-wrap: anywhere; /* 320px 줄바꿈 */
+}
+.concurrency-presets__item:last-child { margin-bottom: 0; }
+.concurrency-presets__item .state-tag {
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em;
+  text-transform: none; white-space: nowrap;
+}
+
+.concurrency-presets__item--waiting {
+  background: var(--color-status-waiting); color: var(--c-on-waiting);
+  border-left-color: #94a3b8; opacity: 0.9;
+}
+.concurrency-presets__item--running {
+  background: var(--color-status-running); color: var(--c-on-running);
+  border-left-color: #b45309;
+}
+.concurrency-presets__item--complete {
+  background: var(--color-status-complete); color: var(--c-on-complete);
+  border-left-color: #166534;
+}
+
+/* motion (§5.5 · prefers-reduced-motion 존중) */
+@media (prefers-reduced-motion: no-preference) {
+  .concurrency-presets__item { transition: background-color 0.2s ease, color 0.2s ease; }
+  .concurrency-presets__item--running { animation: cp-pulse 1.4s ease-in-out infinite; }
+  @keyframes cp-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+    50%      { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35); }
+  }
+}
+```
+
+> 위 코드는 계약 frozen selector(`concurrency-presets*`, `timeline-preset-*`, `preset-run/reset`)와
+> frozen token(`--color-status-*`, `--space-panel-gap`)만 사용한다. `.concurrency-presets__controls`,
+> `.concurrency-presets__status`, `.count`, `.state-tag`는 계약에 없는 **로컬 보조 class**로,
+> developer가 `index.html` 구조에 맞춰 이름을 바꿔도 무방하다(frozen 이름만 고정).
+
 ## 7. mockup 참조
 
 - 파일: [`docs/design/mockups/concurrency-presets-F68F701A7A-46.html`](./mockups/concurrency-presets-F68F701A7A-46.html)
@@ -214,3 +390,9 @@ modifier만 교체한다.
 | 기존 요소 보존 | ✅ 신규 문서 2종만 추가(docs/design/**). index.js·테스트·README·package.json·demo/ 미변경. 계약 이름 재정의 없음. |
 | 컴포넌트 매핑 | ✅ 계약 6절의 모든 id/class를 §5 컴포넌트 표에 1:1 매핑. base+modifier 조합 규칙 명시. |
 | 모호함 flag | ⚠️ 보조 팔레트 로컬 변수명은 developer 재량으로 열어둠(frozen token 4종만 고정). ⚠️ pulse 애니메이션·`data-state` 속성은 **선택**(권장)으로 표기 — 계약에 없으므로 강제하지 않음. |
+
+### 8.1 리뷰 대응 이력 (F68F701A7A-46 conditional · MAJOR)
+
+| 지적 | 대응 |
+|---|---|
+| `demo/concurrency-presets/styles.css` 부재로 `index.html` 스타일시트 참조 404 · design token 미적용 (reviewer, owner=designer) | §0 note + §6.8에 **그대로 저장 가능한 완성형 `styles.css` 전문**을 동결 제공. developer(F68F701A7A-47)가 §6.8을 `demo/concurrency-presets/styles.css`로 저장하면 404·토큰 미적용 해소. designer는 owned_paths(`docs/design/**`)·no-code 경계상 `demo/` 파일을 직접 생성할 수 없어 명세로 완결 제공하고, 물리적 파일 생성 책임을 developer로 명확화. plan §4의 "designer" 라벨과 designer no-code 경계 간 불일치는 planner 조율 대상으로 flag. |

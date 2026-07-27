@@ -177,10 +177,15 @@ function render() {
 	statusBadge.textContent = STATUS_TEXT[state];
 	statusBadge.className = `status-badge ${badgeModifier(state)}`;
 
+	// plan §5.3 상태×control 매트릭스:
+	//   idle     → add 활성, pause 비활성, resume 비활성
+	//   running  → add 활성, pause 활성,  resume 비활성
+	//   draining → add 활성, pause 활성,  resume 활성(§6.2)
+	//   paused   → add 활성, pause 비활성, resume 활성
 	// 작업 추가는 항상 가능(게이트가 닫혀 있으면 보류로 큐잉).
 	addButton.disabled = false;
-	pauseButton.disabled = state !== 'running';
-	resumeButton.disabled = state === 'running';
+	pauseButton.disabled = !(state === 'running' || state === 'draining');
+	resumeButton.disabled = !(state === 'paused' || state === 'draining');
 
 	renderTasks();
 }

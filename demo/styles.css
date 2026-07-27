@@ -1,14 +1,14 @@
 /*
  * pause/resume 대시보드 스타일 (F68F701A7A-65)
  * frozen UI 계약(ui-contract@v1)의 design token 이름을 그대로 선언·사용한다.
- * token 이름은 변경하지 않으며, 실제 값은 designer 시각 명세가 확정되면 그 값으로 정렬한다.
+ * token 이름은 변경하지 않으며, 값은 designer 확정 hex로 정렬한다.
  */
 
 :root {
-	/* 동결된 design token — 이름 고정 */
-	--color-status-running: #1a7f37;
-	--color-status-paused: #9a6700;
-	--color-status-idle: #57606a;
+	/* 동결된 design token — 이름 고정, 값은 designer 확정 hex */
+	--color-status-running: #15803D;
+	--color-status-paused: #B45309;
+	--color-status-idle: #475569;
 	--space-control-gap: 0.75rem;
 	--font-size-counter: 1.5rem;
 

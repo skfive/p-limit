@@ -1,5 +1,10 @@
 import {expectType, expectError} from 'tsd';
-import pLimit, {limitFunction} from './index.js';
+import pLimit, {
+	limitFunction,
+	definePreset,
+	UnknownPresetError,
+	type LimitFunction,
+} from './index.js';
 
 const limit = pLimit(1);
 const limitWithRejectOnClear = pLimit({concurrency: 1, rejectOnClear: true});
@@ -125,3 +130,30 @@ expectType<Promise<number | undefined>>(limitedForFind.find([1, 2, 3], async n =
 
 // [T15] a predicate returning a non-boolean is a type error
 expectError(limit.find([1, 2, 3], async n => n));
+
+// [P1] definePreset returns void
+expectType<void>(definePreset('fast', 4));
+
+// [P2] pLimit accepts a preset name string and returns a LimitFunction
+expectType<LimitFunction>(pLimit('fast'));
+
+// [P3] pLimit accepts a preset name via the options object
+expectType<LimitFunction>(pLimit({concurrency: 'fast'}));
+
+// [P4] usePreset returns void on both LimitFunction and LimitedFunction
+expectType<void>(limit.usePreset('fast'));
+
+// [P5] UnknownPresetError exposes a string presetName and a literal name
+const presetError = new UnknownPresetError('fast');
+expectType<string>(presetError.presetName);
+expectType<'UnknownPresetError'>(presetError.name);
+
+// [P6] limitFunction accepts a preset name and exposes usePreset
+const limitedForPreset = limitFunction(async (_n: number) => _n, {concurrency: 'fast'});
+expectType<void>(limitedForPreset.usePreset('fast'));
+
+// [P7] a non-string preset name is a type error
+expectError(definePreset(123, 4));
+
+// [P8] numeric concurrency argument stays backward compatible
+expectType<LimitFunction>(pLimit(2));

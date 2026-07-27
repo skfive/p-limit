@@ -1,10 +1,23 @@
 import Queue from 'yocto-queue';
 
+// Module-global preset registry (one per module): maps a preset name to a
+// concurrency value. Every limiter created from this module shares it. Starts
+// empty — no built-in presets are provided (see docs/plans, additive integrity).
+const presets = new Map();
+
 export default function pLimit(concurrency) {
 	let rejectOnClear = false;
 
 	if (typeof concurrency === 'object') {
 		({concurrency, rejectOnClear = false} = concurrency);
+	}
+
+	// A string concurrency is always a preset name (never number-parsed): resolve
+	// it to the registered numeric value before the core validation runs. This is
+	// the only new branch on the creation path; numbers/objects behave exactly as
+	// before (additive integrity).
+	if (typeof concurrency === 'string') {
+		concurrency = lookupPreset(concurrency);
 	}
 
 	validateConcurrency(concurrency);
@@ -478,6 +491,40 @@ export default function pLimit(concurrency) {
 		schedule();
 	});
 
+	// The single concurrency-mutation boundary, shared by the `concurrency` setter
+	// and `usePreset()` so there is exactly one scheduling path (no duplication).
+	// It validates, updates the live limit, emits the change transition only when
+	// the value actually changed, then drains promotable tasks on a microtask —
+	// preserving the exact previous timing/settlement semantics.
+	const setConcurrency = newConcurrency => {
+		validateConcurrency(newConcurrency);
+		const changed = newConcurrency !== concurrency;
+		concurrency = newConcurrency;
+
+		// Concurrency-change transition, emitted only when the value actually
+		// changed (plan §3.4 / E4). The microtask drain below preserves the
+		// existing timing and emits its own start transitions via resumeNext().
+		if (changed) {
+			notifyListeners();
+		}
+
+		queueMicrotask(() => {
+			// The `!paused` guard both honors a paused limiter (drain stays
+			// deferred until `resume()`) and prevents an infinite loop: while
+			// paused, `resumeNext()` is a no-op so `activeCount`/`queue.size`
+			// would never change inside this loop.
+			// eslint-disable-next-line no-unmodified-loop-condition
+			while (!paused && activeCount < concurrency && queue.size > 0) {
+				resumeNext();
+			}
+
+			// Promote lazily-consumed `limit.map` draws to the new limit too.
+			for (const schedule of mapSchedulers) {
+				schedule();
+			}
+		});
+	};
+
 	Object.defineProperties(generator, {
 		activeCount: {
 			get: () => activeCount,
@@ -593,32 +640,16 @@ export default function pLimit(concurrency) {
 			get: () => concurrency,
 
 			set(newConcurrency) {
-				validateConcurrency(newConcurrency);
-				const changed = newConcurrency !== concurrency;
-				concurrency = newConcurrency;
-
-				// Concurrency-change transition, emitted only when the value actually
-				// changed (plan §3.4 / E4). The microtask drain below preserves the
-				// existing timing and emits its own start transitions via resumeNext().
-				if (changed) {
-					notifyListeners();
-				}
-
-				queueMicrotask(() => {
-					// The `!paused` guard both honors a paused limiter (drain stays
-					// deferred until `resume()`) and prevents an infinite loop: while
-					// paused, `resumeNext()` is a no-op so `activeCount`/`queue.size`
-					// would never change inside this loop.
-					// eslint-disable-next-line no-unmodified-loop-condition
-					while (!paused && activeCount < concurrency && queue.size > 0) {
-						resumeNext();
-					}
-
-					// Promote lazily-consumed `limit.map` draws to the new limit too.
-					for (const schedule of mapSchedulers) {
-						schedule();
-					}
-				});
+				setConcurrency(newConcurrency);
+			},
+		},
+		usePreset: {
+			value(name) {
+				// Resolve the preset name BEFORE any mutation so an unknown name throws
+				// `UnknownPresetError` while `concurrency` is left untouched (plan §3.3 /
+				// E1). On success this is exactly `limit.concurrency = <preset value>`.
+				const value = lookupPreset(name);
+				setConcurrency(value);
 			},
 		},
 		map: {
@@ -778,6 +809,13 @@ export function limitFunction(function_, options) {
 				limit.concurrency = newConcurrency;
 			},
 		},
+		usePreset: {
+			value(name) {
+				// Delegate to the underlying limiter so preset resolution and the
+				// concurrency-mutation scheduling live in exactly one place.
+				limit.usePreset(name);
+			},
+		},
 		filter: {
 			value(iterable, predicateFunction) {
 				// Delegate to the underlying limiter's `filter` — no scheduling or
@@ -812,4 +850,43 @@ function validateConcurrency(concurrency) {
 	if (!((Number.isInteger(concurrency) || concurrency === Number.POSITIVE_INFINITY) && concurrency > 0)) {
 		throw new TypeError('Expected `concurrency` to be a number from 1 and up');
 	}
+}
+
+/**
+Thrown when a preset name is looked up (`pLimit(name)`, `pLimit({concurrency: name})`,
+or `limit.usePreset(name)`) but no preset with that name has been registered.
+*/
+export class UnknownPresetError extends Error {
+	constructor(presetName) {
+		super(`Unknown preset: \`${presetName}\``);
+		this.name = 'UnknownPresetError';
+		this.presetName = presetName;
+	}
+}
+
+// Resolve a preset name to its registered concurrency value, throwing
+// `UnknownPresetError` when it is not registered. The lookup never mutates the
+// registry, so callers can resolve before mutating and leave state intact on failure.
+function lookupPreset(name) {
+	if (!presets.has(name)) {
+		throw new UnknownPresetError(name);
+	}
+
+	return presets.get(name);
+}
+
+export function definePreset(name, concurrency) {
+	if (typeof name !== 'string' || name.length === 0) {
+		throw new TypeError('Expected `name` to be a non-empty string');
+	}
+
+	// Reuse the core concurrency rule (positive integer or Infinity) so preset
+	// values follow the exact same validity contract — no new validation rule.
+	// Validation runs before the write, so a rejected value leaves any existing
+	// registration for `name` untouched (plan §7 E2).
+	validateConcurrency(concurrency);
+
+	// Register / overwrite. Already-created limiters captured their concurrency at
+	// creation time, so overwriting a name does not retroactively change them.
+	presets.set(name, concurrency);
 }

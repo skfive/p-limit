@@ -36,12 +36,12 @@ Returns a `limit` function.
 
 #### concurrency
 
-Type: `number | object`\
+Type: `number | string | object`\
 Minimum: `1`
 
 Concurrency limit.
 
-You can pass a number or an options object with a `concurrency` property.
+You can pass a number, a registered preset name (see [`definePreset`](#definepresetname-concurrency-named-export)), or an options object with a `concurrency` property. A string is always treated as a preset name — it is never parsed as a number — so an unregistered name throws an [`UnknownPresetError`](#unknownpreseterror-named-export).
 
 #### rejectOnClear
 
@@ -55,6 +55,61 @@ This is recommended if you await the returned promises, for example with `Promis
 import pLimit from 'p-limit';
 
 const limit = pLimit({concurrency: 1});
+```
+
+### definePreset(name, concurrency) <sup>named export</sup>
+
+Register a named concurrency preset so limiters can be created or switched by a meaningful name instead of a repeated number.
+
+The registry is module-global (shared by every limiter created from the same module) and starts empty — there are no built-in presets.
+
+Returns `undefined`.
+
+```js
+import pLimit, {definePreset} from 'p-limit';
+
+definePreset('fast', 8);
+
+const limit = pLimit('fast');
+console.log(limit.concurrency);
+//=> 8
+```
+
+#### name
+
+Type: `string`
+
+A non-empty preset name.
+
+#### concurrency
+
+Type: `number`\
+Minimum: `1`
+
+Concurrency value for the preset — a positive integer or `Infinity`, the same rule as [`pLimit`](#plimitconcurrency-default-export).
+
+Registering an existing name **overwrites** it. Limiters created earlier keep the concurrency they captured at creation time, so overwriting a name does not retroactively change them.
+
+Throws a `TypeError` when `name` is not a non-empty string, or when `concurrency` is not a positive integer / `Infinity`. A rejected registration leaves any existing value for `name` unchanged.
+
+### UnknownPresetError <sup>named export</sup>
+
+Error thrown when a preset name is looked up (`pLimit(name)`, `pLimit({concurrency: name})`, or [`limit.usePreset(name)`](#limitusepresetname)) but no preset with that name has been registered.
+
+- `error.name` is `'UnknownPresetError'`.
+- `error.presetName` is the preset name that failed to resolve.
+
+```js
+import pLimit, {UnknownPresetError} from 'p-limit';
+
+try {
+	pLimit('missing');
+} catch (error) {
+	console.log(error instanceof UnknownPresetError);
+	//=> true
+	console.log(error.presetName);
+	//=> 'missing'
+}
 ```
 
 ### limit(fn, ...args)
@@ -229,6 +284,28 @@ Awaiting the returned promises (for example with `Promise.all`) is recommended w
 ### limit.concurrency
 
 Get or set the concurrency limit.
+
+### limit.usePreset(name)
+
+Switch the limiter's concurrency to a [registered preset](#definepresetname-concurrency-named-export).
+
+Looks up `name` in the preset registry and assigns its value exactly like `limit.concurrency = value`, so waiting tasks are promoted up to the new limit the same way a numeric change would promote them.
+
+Returns `undefined`.
+
+Throws an [`UnknownPresetError`](#unknownpreseterror-named-export) when `name` is not registered. The lookup happens before the assignment, so a failed switch leaves the current `concurrency` unchanged and does not disturb running or queued tasks.
+
+```js
+import pLimit, {definePreset} from 'p-limit';
+
+definePreset('fast', 8);
+definePreset('slow', 2);
+
+const limit = pLimit('fast'); // concurrency === 8
+
+// Later, dial the limit down under load:
+limit.usePreset('slow'); // concurrency === 2
+```
 
 ### limit.onIdle()
 
@@ -424,10 +501,10 @@ Type: `object`
 
 #### concurrency
 
-Type: `number`\
+Type: `number | string`\
 Minimum: `1`
 
-Concurrency limit.
+Concurrency limit. May be a number or a registered preset name (see [`definePreset`](#definepresetname-concurrency-named-export)).
 
 #### rejectOnClear
 
@@ -437,7 +514,7 @@ Default: `false`
 Reject pending promises with an `AbortError` when `clearQueue()` is called.
 This is recommended if you await the returned promises, for example with `Promise.all`, so pending tasks do not remain unresolved after `clearQueue()`.
 
-The returned function also exposes the same control and observation surface as `limit`: `.activeCount`, `.pendingCount`, `.concurrency` (get/set), `.clearQueue()`, `.onIdle()`, `.isIdle`, `.isSaturated`, `.pause()`, `.resume()`, and `.isPaused`.
+The returned function also exposes the same control and observation surface as `limit`: `.activeCount`, `.pendingCount`, `.concurrency` (get/set), `.usePreset()`, `.clearQueue()`, `.onIdle()`, `.isIdle`, `.isSaturated`, `.pause()`, `.resume()`, and `.isPaused`.
 
 ```js
 import {limitFunction} from 'p-limit';

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Preset Lab — 동시성 프리셋 비교 UI mockup (F68F701A7A-70)</title>
+  <style>
+    /* ===== frozen design token (이름 고정, 값은 designer 정의) ===== */
+    .preset-lab {
+      --color-preset-active: #2563eb;
+      --color-preset-idle:   #e2e8f0;
+      --color-metric-value:  #0f172a;
+      --space-preset-gap:    0.75rem;
+      --font-metric-size:    2.25rem;
+    }
+    /* ===== 보조 팔레트 (frozen 밖 — mockup 표현용) ===== */
+    :root {
+      --bg:        #f8fafc;
+      --surface:   #ffffff;
+      --border:    #cbd5e1;
+      --text:      #0f172a;
+      --muted:     #64748b;
+      --idle-text: #334155;
+      --st-idle-fg:#475569; --st-idle-bg:#f1f5f9;
+      --st-run-fg: #1d4ed8; --st-run-bg: #dbeafe;
+      --st-done-fg:#15803d; --st-done-bg:#dcfce7;
+      --st-err-fg: #b91c1c; --st-err-bg: #fee2e2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, "Noto Sans KR", sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+      padding: 1.5rem 1rem;
+    }
+    .page { max-width: 720px; margin: 0 auto; }
+    .page__title { font-size: 1.25rem; font-weight: 700; margin: 0 0 0.25rem; }
+    .page__sub { color: var(--muted); font-size: 0.8125rem; margin: 0 0 1.5rem; }
+    .doc-note {
+      background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+      border-radius: 8px; padding: 0.6rem 0.85rem; font-size: 0.8125rem;
+      margin: 0 0 1.5rem;
+    }
+
+    /* ===== Preset Lab 컴포넌트 (frozen ID/class) ===== */
+    .preset-lab {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      max-width: 640px;
+      margin: 0 auto 1.5rem;
+    }
+    .preset-lab__title { font-size: 1.5rem; font-weight: 700; line-height: 1.3; margin: 0 0 1.25rem; }
+    .preset-lab__section-label { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+    .preset-lab__section-label:first-of-type { margin-top: 0; }
+
+    /* 프리셋 controls */
+    .preset-lab__controls {
+      display: flex;
+      gap: var(--space-preset-gap);
+    }
+    .preset-lab__preset {
+      flex: 1;
+      font: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      background: var(--color-preset-idle);
+      color: var(--idle-text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.7rem 0.75rem;
+      text-align: center;
+      min-width: 0;
+    }
+    .preset-lab__preset .preset-lab__preset-name { display: block; font-weight: 600; }
+    .preset-lab__preset .preset-lab__preset-val  { display: block; font-size: 0.8125rem; color: var(--muted); }
+    .preset-lab__preset--active {
+      background: var(--color-preset-active);
+      color: #ffffff;
+      border-color: var(--color-preset-active);
+    }
+    .preset-lab__preset--active .preset-lab__preset-val { color: #dbeafe; }
+    .preset-lab__preset:focus-visible,
+    .preset-lab__run:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+    /* 실행 버튼 */
+    .preset-lab__run {
+      display: inline-block;
+      margin-top: 1rem;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--color-preset-active);
+      color: #ffffff;
+      border: 1px solid var(--color-preset-active);
+      border-radius: 8px;
+      padding: 0.65rem 1.4rem;
+    }
+    .preset-lab__run[disabled] { opacity: 0.55; cursor: not-allowed; }
+
+    /* 상태 메시지 배지 */
+    #status-message {
+      display: flex; align-items: center; gap: 0.5rem;
+      margin: 1rem 0 0;
+      padding: 0.55rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.9375rem; font-weight: 600;
+    }
+    #status-message::before { content: "●"; font-size: 0.75rem; }
+    .preset-lab__status--idle     { background: var(--st-idle-bg); color: var(--st-idle-fg); }
+    .preset-lab__status--running  { background: var(--st-run-bg);  color: var(--st-run-fg); }
+    .preset-lab__status--complete { background: var(--st-done-bg); color: var(--st-done-fg); }
+    .preset-lab__status--error    { background: var(--st-err-bg);  color: var(--st-err-fg); }
+
+    /* 메트릭 */
+    .preset-lab__metrics { display: flex; gap: 1rem; }
+    .preset-lab__metric {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      min-width: 0;
+    }
+    .preset-lab__metric-label { display: block; font-size: 0.8125rem; font-weight: 600; color: var(--muted); }
+    .preset-lab__metric-value {
+      display: block;
+      font-size: var(--font-metric-size);
+      font-weight: 700;
+      line-height: 1.1;
+      color: var(--color-metric-value);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 결과 표 */
+    .preset-lab__result { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+    .preset-lab__result th, .preset-lab__result td {
+      text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border);
+    }
+    .preset-lab__result th { font-size: 0.8125rem; color: var(--muted); font-weight: 600; }
+    .preset-lab__result td { font-variant-numeric: tabular-nums; }
+    .tag-done { color: var(--st-done-fg); font-weight: 600; }
+
+    /* ===== 상태 갤러리 (정적 시연 — frozen ID 미중복을 위해 class 기반) ===== */
+    .gallery { max-width: 640px; margin: 0 auto 1.5rem; }
+    .gallery__grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+    .state-card { border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem; background: var(--surface); }
+    .state-card__badge {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.7rem; border-radius: 8px; font-weight: 600; font-size: 0.875rem;
+    }
+    .state-card__badge::before { content: "●"; font-size: 0.7rem; }
+    .state-card__desc { font-size: 0.8125rem; color: var(--muted); margin: 0.5rem 0 0; }
+    .state-card__meta { font-size: 0.8125rem; margin: 0.4rem 0 0; }
+
+    .section-heading { max-width: 640px; margin: 2rem auto 0.75rem; font-size: 1.1rem; font-weight: 700; }
+
+    /* ===== 반응형 (frozen §5.6) ===== */
+    @media (max-width: 480px) {
+      .preset-lab__controls { flex-direction: column; }   /* 세로 stack */
+      .preset-lab__preset   { width: 100%; }
+      .preset-lab__metrics  { flex-direction: column; }
+      .gallery__grid        { grid-template-columns: 1fr; }
+      .preset-lab { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1 class="page__title">Preset Lab — 동시성 프리셋 비교 UI mockup</h1>
+    <p class="page__sub">F68F701A7A-70 · designer 시각 시안 · frozen ui-contract@v1 반영 · 외부 의존성 0건</p>
+    <p class="doc-note">
+      ⚠️ 이 파일은 <strong>시각 시뮬레이션</strong>입니다. 실제 구현(<code>demo/**</code>)은 developer 소유이며,
+      dev는 이 mockup을 참조 가이드로 사용하되 픽셀 단위 일치 의무는 없습니다. frozen selector·token 이름은 그대로 사용합니다.
+    </p>
+
+    <!-- ===== 1. 기본 컴포넌트 (running 스냅샷, frozen ID/class) ===== -->
+    <p class="section-heading">1. 기본 컴포넌트 — 실행 중(running) 스냅샷</p>
+    <section id="preset-lab" class="preset-lab" aria-labelledby="preset-lab-title">
+      <h2 id="preset-lab-title" class="preset-lab__title">동시성 프리셋 비교</h2>
+
+      <p class="preset-lab__section-label">프리셋</p>
+      <div class="preset-lab__controls" role="group" aria-label="프리셋 선택">
+        <button type="button" id="preset-slow" class="preset-lab__preset" aria-pressed="false">
+          <span class="preset-lab__preset-name">느림</span>
+          <span class="preset-lab__preset-val">동시 1</span>
+        </button>
+        <button type="button" id="preset-balanced" class="preset-lab__preset preset-lab__preset--active" aria-pressed="true">
+          <span class="preset-lab__preset-name">균형</span>
+          <span class="preset-lab__preset-val">동시 2</span>
+        </button>
+        <button type="button" id="preset-fast" class="preset-lab__preset" aria-pressed="false">
+          <span class="preset-lab__preset-name">빠름</span>
+          <span class="preset-lab__preset-val">동시 4</span>
+        </button>
+      </div>
+
+      <button type="button" id="preset-run" class="preset-lab__run"
+              aria-label="선택한 프리셋으로 동시성 비교 실행" disabled>실행 중…</button>
+
+      <p id="status-message" class="preset-lab__status--running" aria-live="polite">
+        실행 중 — 태스크 처리 중입니다 (균형 · 동시 2)
+      </p>
+
+      <p class="preset-lab__section-label">메트릭</p>
+      <div class="preset-lab__metrics">
+        <div class="preset-lab__metric">
+          <span class="preset-lab__metric-label">실행 중 (active)</span>
+          <span id="active-count" class="preset-lab__metric-value" aria-live="polite">2</span>
+        </div>
+        <div class="preset-lab__metric">
+          <span class="preset-lab__metric-label">대기 중 (pending)</span>
+          <span id="pending-count" class="preset-lab__metric-value" aria-live="polite">6</span>
+        </div>
+      </div>
+
+      <p class="preset-lab__section-label">결과</p>
+      <table id="result-table" class="preset-lab__result">
+        <thead>
+          <tr><th scope="col">#</th><th scope="col">태스크</th><th scope="col">상태</th><th scope="col">소요(ms)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>task-1</td><td class="tag-done">완료</td><td>312</td></tr>
+          <tr><td>2</td><td>task-2</td><td class="tag-done">완료</td><td>298</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ===== 2. 상태 갤러리 (idle/running/complete/error — 색상 외 텍스트 동반) ===== -->
+    <p class="section-heading">2. 상태 갤러리 — 4개 상태 (색상 외 상태명 텍스트 항상 동반)</p>
+    <div class="gallery">
+      <div class="gallery__grid">
+        <div class="state-card">
+          <span class="state-card__badge preset-lab__status--idle">idle · 대기 중</span>
+          <p class="state-card__desc">대기 중 — 프리셋을 선택하고 실행하세요</p>
+          <p class="state-card__meta">active <strong>0</strong> / pending <strong>0</strong> · 실행 버튼 <strong>사용 가능</strong></p>
+        </div>
+        <div class="state-card">
+          <span class="state-card__badge preset-lab__status--running">running · 실행 중</span>
+          <p class="state-card__desc">실행 중 — 태스크 처리 중입니다</p>
+          <p class="state-card__meta">active <strong>2</strong> / pending <strong>6</strong> · 실행 버튼 <strong>비활성</strong></p>
+        </div>
+        <div class="state-card">
+          <span class="state-card__badge preset-lab__status--complete">complete · 완료</span>
+          <p class="state-card__desc">완료 — 모든 태스크가 처리되었습니다</p>
+          <p class="state-card__meta">active <strong>0</strong> / pending <strong>0</strong> · 결과 표 <strong>채워짐</strong></p>
+        </div>
+        <div class="state-card">
+          <span class="state-card__badge preset-lab__status--error">error · 오류</span>
+          <p class="state-card__desc">오류 — 실행에 실패했습니다. 다시 시도하세요</p>
+          <p class="state-card__meta">active <strong>0</strong> / pending <strong>0</strong> · 실행 버튼 <strong>재사용 가능</strong></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 3. 프리셋 선택 상태 시연 (idle vs active) ===== -->
+    <p class="section-heading">3. 프리셋 선택 상태 — 미선택(aria-pressed=false) vs 선택(active)</p>
+    <div class="gallery">
+      <div class="preset-lab" style="max-width:none;margin:0;">
+        <div class="preset-lab__controls" role="group" aria-label="프리셋 선택 상태 예시">
+          <button type="button" class="preset-lab__preset preset-lab__preset--active" aria-pressed="true">
+            <span class="preset-lab__preset-name">느림</span><span class="preset-lab__preset-val">동시 1 · 선택됨</span>
+          </button>
+          <button type="button" class="preset-lab__preset" aria-pressed="false">
+            <span class="preset-lab__preset-name">균형</span><span class="preset-lab__preset-val">동시 2</span>
+          </button>
+          <button type="button" class="preset-lab__preset" aria-pressed="false">
+            <span class="preset-lab__preset-name">빠름</span><span class="preset-lab__preset-val">동시 4</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 4. 반응형 노트 ===== -->
+    <p class="section-heading">4. 반응형 (frozen §5.6)</p>
+    <div class="gallery">
+      <div class="state-card" style="max-width:none;">
+        <p class="state-card__meta" style="margin-top:0;">
+          · <strong>≥ 480px</strong>: 프리셋 controls·메트릭 가로 배치 (flex row 균등)<br>
+          · <strong>&lt; 480px</strong>: <code>.preset-lab__controls</code>·메트릭 <strong>세로 stack</strong> (창 너비를 480px 미만으로 줄여 확인)<br>
+          · <strong>≥ 320px 전 범위</strong>: <code>box-sizing:border-box</code> + <code>max-width:100%</code>로 가로 overflow 없음<br>
+          · 카운터 수치 <code>tabular-nums</code>로 자릿수 폭 안정화
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

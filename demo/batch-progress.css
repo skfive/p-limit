@@ -1,0 +1,239 @@
+/*
+ * 배치 진행 데모 — 스타일 (F68F701A7A-53)
+ *
+ * frozen UI 계약(ui-contract@v1) §6 의 design token 이름을 그대로 정의·사용한다.
+ * 상태는 색상만이 아니라 한글 상태 텍스트(.batch-task__state)로도 구분한다(§7).
+ * 320px 이상에서 control·상태 텍스트에 content overflow 가 없도록 구성한다(§8).
+ */
+
+:root {
+	/* 상태 색상 토큰(§6, §4) — 이름 변경/재정의 금지. */
+	--color-status-pending: #6b7280;
+	--color-status-running: #2563eb;
+	--color-status-done: #16a34a;
+	--color-status-cancelled: #d97706;
+	--color-status-failed: #dc2626;
+
+	/* control 간 간격 토큰(§6) — wrap 시에도 유지. */
+	--space-control-gap: 0.75rem;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	padding: 1.5rem;
+	font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+	line-height: 1.5;
+	color: #1f2937;
+	background: #f9fafb;
+}
+
+.batch-progress {
+	max-width: 640px;
+	margin: 0 auto;
+	padding: 1.5rem;
+	background: #ffffff;
+	border: 1px solid #e5e7eb;
+	border-radius: 0.75rem;
+}
+
+.batch-progress__header h1 {
+	margin: 0 0 0.5rem;
+	font-size: 1.4rem;
+}
+
+.batch-progress__header p {
+	margin: 0 0 1rem;
+	color: #4b5563;
+}
+
+.batch-progress__header code {
+	padding: 0.05em 0.35em;
+	background: #f3f4f6;
+	border-radius: 0.25rem;
+	font-size: 0.9em;
+}
+
+/* controls — 좁은 폭에서 --space-control-gap 간격으로 wrap(§8). */
+.batch-progress__controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-control-gap);
+}
+
+.batch-progress__controls button {
+	flex: 0 1 auto;
+	min-height: 2.5rem;
+	padding: 0.5rem 1.25rem;
+	font-size: 1rem;
+	font-weight: 600;
+	color: #ffffff;
+	background: #2563eb;
+	border: none;
+	border-radius: 0.5rem;
+	cursor: pointer;
+}
+
+.batch-progress__controls button#batch-progress-reset {
+	color: #1f2937;
+	background: #e5e7eb;
+}
+
+.batch-progress__controls button:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.batch-progress__controls button:focus-visible {
+	outline: 3px solid #1d4ed8;
+	outline-offset: 2px;
+}
+
+/* 진행률 바 영역. */
+.batch-progress__progress {
+	display: flex;
+	align-items: center;
+	gap: var(--space-control-gap);
+	margin: 1.25rem 0 0.75rem;
+}
+
+.batch-progress__bar {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 0.85rem;
+	background: #e5e7eb;
+	border-radius: 999px;
+	overflow: hidden;
+}
+
+.batch-progress__bar-fill {
+	display: block;
+	width: 0%;
+	height: 100%;
+	background: var(--color-status-running);
+	border-radius: inherit;
+	transition: width 0.2s ease;
+}
+
+.batch-progress__percent {
+	flex: 0 0 auto;
+	min-width: 3ch;
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	text-align: right;
+}
+
+.batch-progress__status {
+	margin: 0 0 1rem;
+	padding: 0.5rem 0.75rem;
+	font-weight: 500;
+	color: #374151;
+	background: #f3f4f6;
+	border-radius: 0.5rem;
+	/* 좁은 폭에서도 긴 상태 문구가 넘치지 않도록 wrap(§8). */
+	overflow-wrap: anywhere;
+}
+
+/* 완료된 배치는 진행 바를 완료 색으로. */
+.batch-progress[data-state="done"] .batch-progress__bar-fill {
+	background: var(--color-status-done);
+}
+
+.batch-progress[data-state="failed"] .batch-progress__bar-fill {
+	background: var(--color-status-failed);
+}
+
+/* task 목록. */
+.batch-progress__task-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: grid;
+	gap: 0.5rem;
+}
+
+.batch-task {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-control-gap);
+	padding: 0.5rem 0.75rem;
+	background: #f9fafb;
+	border: 1px solid #e5e7eb;
+	border-left-width: 4px;
+	border-radius: 0.5rem;
+}
+
+.batch-task__label {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+/* 상태 배지 — 색상 + 한글 텍스트를 함께 노출(§4, §7). */
+.batch-task__state {
+	flex: 0 0 auto;
+	padding: 0.15rem 0.6rem;
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: #ffffff;
+	border-radius: 999px;
+	white-space: nowrap;
+}
+
+.batch-task--pending {
+	border-left-color: var(--color-status-pending);
+}
+
+.batch-task--pending .batch-task__state {
+	background: var(--color-status-pending);
+}
+
+.batch-task--running {
+	border-left-color: var(--color-status-running);
+}
+
+.batch-task--running .batch-task__state {
+	background: var(--color-status-running);
+}
+
+.batch-task--done {
+	border-left-color: var(--color-status-done);
+}
+
+.batch-task--done .batch-task__state {
+	background: var(--color-status-done);
+}
+
+.batch-task--cancelled {
+	border-left-color: var(--color-status-cancelled);
+}
+
+.batch-task--cancelled .batch-task__state {
+	background: var(--color-status-cancelled);
+}
+
+.batch-task--failed {
+	border-left-color: var(--color-status-failed);
+}
+
+.batch-task--failed .batch-task__state {
+	background: var(--color-status-failed);
+}
+
+/* 320px 뷰포트: control·상태가 넘치지 않도록 버튼을 폭에 맞춘다(§8). */
+@media (max-width: 380px) {
+	body {
+		padding: 1rem;
+	}
+
+	.batch-progress {
+		padding: 1rem;
+	}
+
+	.batch-progress__controls button {
+		flex: 1 1 auto;
+	}
+}

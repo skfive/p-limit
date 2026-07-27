@@ -1498,3 +1498,247 @@ test('isSaturated read time does not scale with pending queue size (benchmark)',
 		`expected roughly constant read time regardless of queue size, got small=${small.toFixed(2)}ms large=${large.toFixed(2)}ms`,
 	);
 });
+
+// --- pause() / resume() / isPaused (F68F701A7A-59) ---
+
+test('pause() keeps newly submitted tasks pending instead of starting them', async t => {
+	const limit = pLimit(2);
+	t.is(limit.activeCount, 0);
+
+	limit.pause();
+	t.true(limit.isPaused);
+
+	let started = false;
+	const promises = [
+		limit(async () => {
+			started = true;
+			await delay(10);
+		}),
+		limit(async () => delay(10)),
+	];
+
+	await delay(5);
+
+	// Nothing started while paused, even though both slots were free.
+	t.false(started);
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 2);
+
+	limit.resume();
+	t.is(limit.activeCount, 2);
+	t.is(limit.pendingCount, 0);
+
+	await Promise.all(promises);
+});
+
+test('pause() lets already-running tasks settle normally', async t => {
+	const limit = pLimit(1);
+
+	let resolved = false;
+	const running = limit(async () => {
+		await delay(30);
+		resolved = true;
+		return 'done';
+	});
+
+	await Promise.resolve();
+	t.is(limit.activeCount, 1);
+
+	limit.pause();
+
+	// The running task must still complete despite the pause.
+	t.is(await running, 'done');
+	t.true(resolved);
+});
+
+test('resume() promotes pending tasks up to concurrency in FIFO order', async t => {
+	const limit = pLimit(2);
+	limit.pause();
+
+	const started = [];
+	const promises = [1, 2, 3, 4].map(value => limit(async () => {
+		started.push(value);
+		await delay(20);
+		return value;
+	}));
+
+	await delay(5);
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 4);
+
+	limit.resume();
+
+	// Only up to `concurrency` (2) are promoted; queue order is preserved.
+	t.is(limit.activeCount, 2);
+	t.is(limit.pendingCount, 2);
+
+	t.deepEqual(await Promise.all(promises), [1, 2, 3, 4]);
+	t.deepEqual(started, [1, 2, 3, 4]);
+});
+
+test('concurrency raised while paused takes effect on resume', async t => {
+	const limit = pLimit(1);
+	limit.pause();
+
+	const promises = Array.from({length: 4}, () => limit(async () => delay(20)));
+	await delay(5);
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 4);
+
+	limit.concurrency = 3;
+	// While paused the value updates but no draining happens yet.
+	await delay(5);
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 4);
+
+	limit.resume();
+	// Promotion uses the new (raised) limit.
+	t.is(limit.activeCount, 3);
+	t.is(limit.pendingCount, 1);
+
+	await Promise.all(promises);
+	t.is(limit.activeCount, 0);
+});
+
+test('lowering concurrency while paused never cancels already-running tasks', async t => {
+	const limit = pLimit(3);
+
+	const promises = Array.from({length: 3}, () => limit(async () => delay(30)));
+	await delay(5);
+	t.is(limit.activeCount, 3);
+
+	limit.pause();
+	limit.concurrency = 1;
+
+	// The three in-flight tasks keep running; neither pause nor lowering stops them.
+	t.is(limit.activeCount, 3);
+
+	await Promise.all(promises);
+	t.is(limit.activeCount, 0);
+});
+
+test('clearQueue while paused discards pending tasks and resume starts nothing', async t => {
+	const limit = pLimit(1);
+	const reason = new Error('cleared while paused');
+
+	const running = limit(() => delay(40)); // Active
+	const pendingOne = limit(() => delay(10));
+	const pendingTwo = limit(() => delay(10));
+
+	await Promise.resolve();
+	t.is(limit.activeCount, 1);
+	t.is(limit.pendingCount, 2);
+
+	limit.pause();
+	const removed = limit.clearQueue(reason);
+	t.is(removed, 2);
+	t.is(limit.pendingCount, 0);
+
+	await t.throwsAsync(pendingOne, {is: reason});
+	await t.throwsAsync(pendingTwo, {is: reason});
+
+	limit.resume();
+	await delay(0);
+	// Nothing left to start.
+	t.is(limit.pendingCount, 0);
+
+	await running;
+	t.is(limit.activeCount, 0);
+});
+
+test('a paused limiter with pending tasks is never idle until resumed', async t => {
+	const limit = pLimit(1);
+	limit.pause();
+
+	limit(() => delay(20));
+	limit(() => delay(20));
+
+	await Promise.resolve();
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 2);
+	t.false(limit.isIdle);
+
+	const idle = limit.onIdle();
+	t.true(await isStillPending(idle));
+
+	limit.resume();
+	await idle;
+	t.is(limit.activeCount, 0);
+	t.is(limit.pendingCount, 0);
+	t.true(limit.isIdle);
+});
+
+test('pause()/resume() are idempotent and isPaused reflects the transition', t => {
+	const limit = pLimit(1);
+
+	t.false(limit.isPaused);
+
+	limit.pause();
+	t.true(limit.isPaused);
+	// A second pause is a no-op.
+	limit.pause();
+	t.true(limit.isPaused);
+
+	limit.resume();
+	t.false(limit.isPaused);
+	// Resuming when not paused is a no-op.
+	limit.resume();
+	t.false(limit.isPaused);
+});
+
+test('pause() holds off new async-iterable map draws and resume() finishes them in order', async t => {
+	const limit = pLimit(1);
+	let drawn = 0;
+
+	async function * source() {
+		for (const value of [0, 1, 2, 3]) {
+			drawn++;
+			yield value;
+		}
+	}
+
+	const mapped = limit.map(source(), async value => {
+		await delay(15);
+		return value * 10;
+	});
+
+	// Let the first draw start, then pause before the rest are drawn.
+	await delay(5);
+	limit.pause();
+	const drawnAtPause = drawn;
+
+	await delay(40);
+	// No new draws happened while paused.
+	t.is(drawn, drawnAtPause);
+
+	limit.resume();
+	const results = await mapped;
+
+	// Every value is processed and the output stays in draw order.
+	t.deepEqual(results, [0, 10, 20, 30]);
+	t.is(drawn, 4);
+});
+
+test('limitFunction() delegates pause()/resume()/isPaused to the underlying limiter', async t => {
+	const limitedFunction = limitFunction(() => delay(20), {concurrency: 2});
+
+	t.false(limitedFunction.isPaused);
+
+	limitedFunction.pause();
+	t.true(limitedFunction.isPaused);
+
+	const promises = Array.from({length: 3}, () => limitedFunction());
+	await delay(5);
+	// Paused: nothing starts even with free slots.
+	t.is(limitedFunction.activeCount, 0);
+	t.is(limitedFunction.pendingCount, 3);
+
+	limitedFunction.resume();
+	t.false(limitedFunction.isPaused);
+	t.is(limitedFunction.activeCount, 2);
+	t.is(limitedFunction.pendingCount, 1);
+
+	await Promise.all(promises);
+	t.is(limitedFunction.activeCount, 0);
+	t.is(limitedFunction.pendingCount, 0);
+});

@@ -66,6 +66,31 @@ export type LimitFunction = {
 	readonly isSaturated: boolean;
 
 	/**
+	Pause the limiter.
+
+	Stops promoting pending tasks so no queued task starts until `resume()` is called.
+	Tasks that are already running are not affected and will settle normally.
+	Calling `pause()` while already paused is a no-op.
+	*/
+	pause: () => void;
+
+	/**
+	Resume a paused limiter.
+
+	Promotes pending tasks up to the current `concurrency` limit, restoring normal scheduling.
+	Calling `resume()` while not paused is a no-op.
+	*/
+	resume: () => void;
+
+	/**
+	Whether the limiter is currently paused — `true` after `pause()` and before `resume()`.
+
+	This is a read-only `O(1)` snapshot. While paused, running tasks still settle but no
+	pending task starts, so a paused limiter with pending tasks is never idle.
+	*/
+	readonly isPaused: boolean;
+
+	/**
 	@param fn - Promise-returning/async function.
 	@param arguments - Any arguments to pass through to `fn`. Support for passing arguments on to the `fn` is provided in order to be able to avoid creating unnecessary closures. You probably don't need this optimization unless you're pushing a *lot* of functions.
 
@@ -201,6 +226,31 @@ export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
 	This is a read-only `O(1)` snapshot that reads the live `concurrency`, so it is accurate synchronously right after a `concurrency` change. A limiter with infinite `concurrency` is never saturated.
 	*/
 	readonly isSaturated: boolean;
+
+	/**
+	Pause the limiter.
+
+	Stops promoting pending tasks so no queued task starts until `resume()` is called.
+	Tasks that are already running are not affected and will settle normally.
+	Calling `pause()` while already paused is a no-op.
+	*/
+	pause: () => void;
+
+	/**
+	Resume a paused limiter.
+
+	Promotes pending tasks up to the current `concurrency` limit, restoring normal scheduling.
+	Calling `resume()` while not paused is a no-op.
+	*/
+	resume: () => void;
+
+	/**
+	Whether the limiter is currently paused — `true` after `pause()` and before `resume()`.
+
+	This is a read-only `O(1)` snapshot. While paused, running tasks still settle but no
+	pending task starts, so a paused limiter with pending tasks is never idle.
+	*/
+	readonly isPaused: boolean;
 
 	/**
 	Call the limited function.

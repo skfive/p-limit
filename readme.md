@@ -106,6 +106,35 @@ const results = await limit.map(pages(), async url => fetch(url));
 
 This is a convenience function for processing inputs that arrive in batches. For more complex use cases, see [p-map](https://github.com/sindresorhus/p-map).
 
+### limit.mapSettled(iterable, mapperFunction)
+
+Like [`limit.map()`](#limitmapiterable-mapperfunction), but every input settles: an individual mapper rejection **never** rejects the returned promise. Each element is reported as a `PromiseSettledResult`, so the result mirrors [`Promise.allSettled()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled) while preserving input (draw) order, regardless of the order in which the mappers complete.
+
+Each result entry is either `{status: 'fulfilled', value}` or `{status: 'rejected', reason}`. The `reason` is the thrown value verbatim, so you never need to wrap the mapper in `try`/`catch` to collect partial failures.
+
+Async iterables are consumed lazily: the next value is only pulled once a concurrency slot frees up, so at most `concurrency` items are drawn but not yet settled at any time. This makes it safe to pass infinite or streaming async iterables without pre-loading them into memory. Sync iterables keep the eager behavior.
+
+Only a failure of the input iterable itself (an `iterator.next()` rejection) rejects the returned promise; in that case the iterator's `return()` is called once for cleanup, matching `limit.map()`.
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(2);
+
+const results = await limit.mapSettled([1, 2, 3], async n => {
+	if (n === 2) {
+		throw new Error('boom');
+	}
+
+	return n * 10;
+});
+//=> [
+//   {status: 'fulfilled', value: 10},
+//   {status: 'rejected', reason: Error('boom')},
+//   {status: 'fulfilled', value: 30}
+// ]
+```
+
 ### limit.activeCount
 
 The number of promises that are currently running.

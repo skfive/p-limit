@@ -166,7 +166,10 @@ export default function pLimit(concurrency) {
 	// Lazily consume an async iterator, keeping at most `concurrency` items
 	// "drawn but not yet settled" at any time (no pre-loading). Results are
 	// stored by draw order, so completion order does not affect the output.
-	const mapAsyncIterable = (iterator, function_) => new Promise((resolve, reject) => {
+	// When `settleMode` is `true` (`limit.mapSettled`), an individual mapper
+	// rejection is recorded as a `PromiseSettledResult` and consumption keeps
+	// going, so only an input-iterator failure rejects the returned promise.
+	const mapAsyncIterable = (iterator, function_, settleMode) => new Promise((resolve, reject) => {
 		const results = [];
 		let index = 0;
 		let inFlight = 0;
@@ -219,11 +222,23 @@ export default function pLimit(concurrency) {
 				const result = await generator(function_, value, currentIndex);
 
 				if (!settled) {
-					results[currentIndex] = result;
+					results[currentIndex] = settleMode ? {status: 'fulfilled', value: result} : result;
 				}
 
 				onTaskDone();
 			} catch (error) {
+				// In `mapSettled` a mapper rejection is a per-index settled result,
+				// not a fatal error: record it verbatim and keep consuming, treating
+				// this slot exactly like a completed task (drives the next draw).
+				if (settleMode) {
+					if (!settled) {
+						results[currentIndex] = {status: 'rejected', reason: error};
+					}
+
+					onTaskDone();
+					return;
+				}
+
 				inFlight--;
 
 				if (!settled) {
@@ -436,11 +451,26 @@ export default function pLimit(concurrency) {
 				// work with O(concurrency) items in flight. Sync iterables keep the
 				// existing eager path for 100% backward-compatible behavior/timing.
 				if (typeof iterable[Symbol.asyncIterator] === 'function') {
-					return mapAsyncIterable(iterable[Symbol.asyncIterator](), function_);
+					return mapAsyncIterable(iterable[Symbol.asyncIterator](), function_, false);
 				}
 
 				const promises = Array.from(iterable, (value, index) => generator(function_, value, index));
 				return Promise.all(promises);
+			},
+		},
+		mapSettled: {
+			async value(iterable, function_) {
+				// Like `map`, but every element settles: an individual mapper
+				// rejection becomes a `{status: 'rejected', reason}` entry instead of
+				// rejecting the whole call, mirroring `Promise.allSettled` while
+				// preserving input (draw) order. Only an input-iterator failure
+				// rejects the returned promise.
+				if (typeof iterable[Symbol.asyncIterator] === 'function') {
+					return mapAsyncIterable(iterable[Symbol.asyncIterator](), function_, true);
+				}
+
+				const promises = Array.from(iterable, (value, index) => generator(function_, value, index));
+				return Promise.allSettled(promises);
 			},
 		},
 		subscribe: {

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>성능 요약 결과 카드 — 시각 mockup (F68F701A7A-111)</title>
+  <style>
+    :root {
+      /* frozen design token (계약 6절 — exact value, 재정의 금지) */
+      --perf-summary-gap: 12px;
+      --perf-card-bg: #f8fafc;
+      --perf-card-accent: #2563eb;
+      --perf-card-radius: 8px;
+      --perf-card-text: #0f172a;
+
+      /* mockup 보조 팔레트 (로컬 · dev 산출물 아님) */
+      --c-bg: #eef2f7;
+      --c-surface: #ffffff;
+      --c-border: #e2e8f0;
+      --c-text-muted: #64748b;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      color: var(--perf-card-text);
+      background: var(--c-bg);
+      line-height: 1.5;
+      padding: 1rem;
+    }
+    @media (min-width: 720px) { body { padding: 1.5rem; } }
+
+    .mock-note {
+      max-width: 960px;
+      margin: 0 auto 1.25rem;
+      font-size: 0.8125rem;
+      color: var(--c-text-muted);
+      background: #fffbeb;
+      border: 1px dashed #fcd34d;
+      border-radius: 8px;
+      padding: 0.625rem 0.875rem;
+    }
+    .mock-section-title {
+      max-width: 960px;
+      margin: 1.75rem auto 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--c-text-muted);
+    }
+    .mock-viewport {
+      max-width: 960px;
+      margin: 0 auto;
+      background: var(--c-surface);
+      border: 1px solid var(--c-border);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+    /* 320px 폭 시뮬레이션 프레임 */
+    .mock-viewport--320 { max-width: 320px; margin: 0 auto; }
+    .mock-caption {
+      max-width: 960px;
+      margin: 0.375rem auto 0;
+      font-size: 0.75rem;
+      color: var(--c-text-muted);
+    }
+
+    /* ===== 요약 region (계약 4절 exact id/class) ===== */
+    .perf-summary {
+      display: flex;
+      flex-direction: column;
+      gap: var(--perf-summary-gap);
+    }
+    .perf-summary__status {
+      margin: 0;
+      font-size: 0.9375rem;
+      font-weight: 700;
+      line-height: 1.4;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    /* 상태 dot 은 보조 표시일 뿐 — 정보는 항상 텍스트가 담당(색상 비의존) */
+    .perf-summary__status::before {
+      content: "";
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      background: var(--c-text-muted);
+      flex: none;
+    }
+    .is-idle .perf-summary__status::before { background: #cbd5e1; }
+    .is-running .perf-summary__status::before { background: #f59e0b; }
+    .is-complete .perf-summary__status::before { background: var(--perf-card-accent); }
+    .is-cleared .perf-summary__status::before { background: #94a3b8; }
+
+    .perf-summary__cards {
+      display: flex;
+      flex-direction: column;      /* 320px↑ 세로 스택 (계약 8절) */
+      gap: var(--perf-summary-gap);
+    }
+    @media (min-width: 480px) {
+      .perf-summary__cards { flex-direction: row; }   /* 480px↑ 가로 정렬 */
+    }
+
+    .perf-card {
+      flex: 1 1 0;
+      min-width: 0;                /* content overflow 방지 */
+      background: var(--perf-card-bg);
+      color: var(--perf-card-text);
+      border: 1px solid var(--c-border);
+      border-radius: var(--perf-card-radius);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .perf-card:hover,
+    .perf-card:focus-within {
+      outline: 2px solid var(--perf-card-accent);
+      outline-offset: 1px;
+    }
+    .perf-card__label {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--c-text-muted);
+    }
+    .perf-card__time {
+      font-family: var(--font-mono);
+      font-size: 1.375rem;
+      font-weight: 700;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    .perf-card__speedup {
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--perf-card-accent);   /* accent — 단, 배수 값은 텍스트로 명시 */
+    }
+
+    /* 반응형 데모 프레임(480px 미만 강제 세로 스택 시각화) */
+    .mock-viewport--320 .perf-summary__cards { flex-direction: column; }
+
+    .legend {
+      max-width: 960px;
+      margin: 2rem auto 0;
+      font-size: 0.8125rem;
+      color: var(--c-text-muted);
+    }
+    .legend code {
+      font-family: var(--font-mono);
+      background: #f1f5f9;
+      padding: 0.05rem 0.35rem;
+      border-radius: 4px;
+    }
+    .legend table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; }
+    .legend th, .legend td {
+      border: 1px solid var(--c-border);
+      padding: 0.375rem 0.5rem;
+      text-align: left;
+      font-size: 0.75rem;
+    }
+    .legend th { background: #f8fafc; }
+  </style>
+</head>
+<body>
+
+  <p class="mock-note">
+    ⚠️ 시각 mockup (F68F701A7A-111) — <strong>dev 산출물 아님</strong>. planner frozen 계약(selector·token·상태·접근성·반응형)을
+    시각 시뮬레이션한 self-contained HTML. 실제 구현은 <code>demo/concurrency-presets/</code> 4개 파일에 additive로 진행.
+    상태별 표현과 320/480px 반응형을 <code>&lt;section&gt;</code>으로 구분.
+  </p>
+
+  <!-- ===== 상태 1: idle (대기) ===== -->
+  <div class="mock-section-title">상태 · idle (대기)</div>
+  <section class="mock-viewport">
+    <div class="perf-summary is-idle" id="perf-summary" aria-live="polite">
+      <p class="perf-summary__status" id="perf-summary-status">대기</p>
+      <div class="perf-summary__cards" id="perf-summary-cards">
+        <article class="perf-card" id="perf-card-c1">
+          <span class="perf-card__label">동시성 1</span>
+          <span class="perf-card__time">— ms</span>
+          <span class="perf-card__speedup">—×</span>
+        </article>
+        <article class="perf-card" id="perf-card-c2">
+          <span class="perf-card__label">동시성 2</span>
+          <span class="perf-card__time">— ms</span>
+          <span class="perf-card__speedup">—×</span>
+        </article>
+        <article class="perf-card" id="perf-card-c4">
+          <span class="perf-card__label">동시성 4</span>
+          <span class="perf-card__time">— ms</span>
+          <span class="perf-card__speedup">—×</span>
+        </article>
+      </div>
+    </div>
+  </section>
+  <p class="mock-caption">초기 로드 / 실행 전. 카드는 placeholder(<code>— ms</code>, <code>—×</code>).</p>
+
+  <!-- ===== 상태 2: running (실행 중) ===== -->
+  <div class="mock-section-title">상태 · running (실행 중)</div>
+  <section class="mock-viewport">
+    <div class="perf-summary is-running" aria-live="polite">
+      <p class="perf-summary__status">실행 중</p>
+      <div class="perf-summary__cards">
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 1</span>
+          <span class="perf-card__time">계측 중…</span>
+          <span class="perf-card__speedup">—×</span>
+        </article>
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 2</span>
+          <span class="perf-card__time">계측 중…</span>
+          <span class="perf-card__speedup">—×</span>
+        </article>
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 4</span>
+          <span class="perf-card__time">계측 중…</span>
+          <span class="perf-card__speedup">—×</span>
+        </article>
+      </div>
+    </div>
+  </section>
+  <p class="mock-caption">진행 표시는 화면 텍스트("실행 중" · "계측 중…")로 노출 — 색상 비의존. 구체 형태는 dev 재량.</p>
+
+  <!-- ===== 상태 3: complete (완료) ===== -->
+  <div class="mock-section-title">상태 · complete (완료) — 최종 metric</div>
+  <section class="mock-viewport">
+    <div class="perf-summary is-complete" aria-live="polite">
+      <p class="perf-summary__status">완료</p>
+      <div class="perf-summary__cards">
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 1</span>
+          <span class="perf-card__time">240 ms</span>
+          <span class="perf-card__speedup">1.00×</span>
+        </article>
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 2</span>
+          <span class="perf-card__time">128 ms</span>
+          <span class="perf-card__speedup">1.88×</span>
+        </article>
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 4</span>
+          <span class="perf-card__time">72 ms</span>
+          <span class="perf-card__speedup">3.33×</span>
+        </article>
+      </div>
+    </div>
+  </section>
+  <p class="mock-caption">
+    각 카드가 경과시간(ms)·동시성1 대비 배수(×)를 화면 텍스트로 표기. <code>aria-live="polite"</code>로 요약을 스크린리더에 전달.
+    (예시값 — <code>speedup = elapsedMs_c1 / elapsedMs</code>)
+  </p>
+
+  <!-- ===== 상태 4: cleared (초기화됨) ===== -->
+  <div class="mock-section-title">상태 · cleared (초기화됨)</div>
+  <section class="mock-viewport">
+    <div class="perf-summary is-cleared" aria-live="polite">
+      <p class="perf-summary__status">초기화됨</p>
+      <div class="perf-summary__cards">
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 1</span>
+          <span class="perf-card__time">— ms</span>
+          <span class="perf-card__speedup">—×</span>
+        </article>
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 2</span>
+          <span class="perf-card__time">— ms</span>
+          <span class="perf-card__speedup">—×</span>
+        </article>
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 4</span>
+          <span class="perf-card__time">— ms</span>
+          <span class="perf-card__speedup">—×</span>
+        </article>
+      </div>
+    </div>
+  </section>
+  <p class="mock-caption">초기화/취소/실패 후 placeholder로 복귀. 주 실행 control 재사용 가능(계약 5절 후조건).</p>
+
+  <!-- ===== 반응형: 320px 세로 스택 ===== -->
+  <div class="mock-section-title">반응형 · 320px (세로 스택 · overflow 없음)</div>
+  <section class="mock-viewport mock-viewport--320">
+    <div class="perf-summary is-complete" aria-live="polite">
+      <p class="perf-summary__status">완료</p>
+      <div class="perf-summary__cards">
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 1</span>
+          <span class="perf-card__time">240 ms</span>
+          <span class="perf-card__speedup">1.00×</span>
+        </article>
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 2</span>
+          <span class="perf-card__time">128 ms</span>
+          <span class="perf-card__speedup">1.88×</span>
+        </article>
+        <article class="perf-card">
+          <span class="perf-card__label">동시성 4</span>
+          <span class="perf-card__time">72 ms</span>
+          <span class="perf-card__speedup">3.33×</span>
+        </article>
+      </div>
+    </div>
+  </section>
+  <p class="mock-caption">320px 이상: <code>#perf-summary-cards</code>가 세로 스택으로 배치, content overflow 없음.</p>
+
+  <!-- ===== 반응형: 480px↑ 가로 정렬 (상단 완료 상태가 이미 가로 정렬을 표현) ===== -->
+  <div class="mock-section-title">반응형 · 480px 이상 (가로 정렬)</div>
+  <p class="mock-caption" style="margin-top:0;">
+    상단 "complete" 프레임이 480px 이상 폭에서 카드가 가로 정렬됨을 그대로 보여준다(<code>flex-direction: row</code>, 카드 <code>flex: 1 1 0</code>·<code>min-width: 0</code>로 overflow 방지).
+  </p>
+
+  <!-- ===== 계약 매핑 범례 ===== -->
+  <div class="legend">
+    <strong>frozen 계약 매핑</strong>
+    <table>
+      <thead>
+        <tr><th>token</th><th>value</th><th>용도</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>--perf-summary-gap</code></td><td><code>12px</code></td><td>region/카드 간 간격</td></tr>
+        <tr><td><code>--perf-card-bg</code></td><td><code>#f8fafc</code></td><td>카드 배경</td></tr>
+        <tr><td><code>--perf-card-accent</code></td><td><code>#2563eb</code></td><td>배수/focus 강조</td></tr>
+        <tr><td><code>--perf-card-radius</code></td><td><code>8px</code></td><td>카드 모서리</td></tr>
+        <tr><td><code>--perf-card-text</code></td><td><code>#0f172a</code></td><td>카드 텍스트</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:0.75rem;">
+      DOM id: <code>perf-summary</code> · <code>perf-summary-status</code> · <code>perf-summary-cards</code> ·
+      <code>perf-card-c1/-c2/-c4</code> — class: <code>perf-summary</code>, <code>perf-summary__status</code>,
+      <code>perf-summary__cards</code>, <code>perf-card</code>, <code>perf-card__label</code>,
+      <code>perf-card__time</code>, <code>perf-card__speedup</code>. 상태: idle/running/complete/cleared.
+    </p>
+  </div>
+
+</body>
+</html>

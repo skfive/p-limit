@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pause/resume 대시보드 — 시각 시안 (F68F701A7A-64)</title>
+  <style>
+    :root {
+      /* 동결 design token — developer가 demo/styles.css :root 에 그대로 선언 */
+      --color-status-idle:    #475569;
+      --color-status-running: #15803D;
+      --color-status-paused:  #B45309;
+      --space-control-gap:    12px;
+      --font-size-counter:    28px;
+
+      /* 보조 색 (비동결 — 시안 표현용, token 아님) */
+      --bg:            #F8FAFC;
+      --surface:       #FFFFFF;
+      --text:          #0F172A;
+      --muted:         #475569;
+      --border:        #E2E8F0;
+      --track:         #F1F5F9;
+      --primary:       #2563EB;
+      --primary-hover: #1D4ED8;
+      --disabled:      #94A3B8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 24px 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Noto Sans KR", "Malgun Gothic", sans-serif;
+      line-height: 1.5;
+    }
+
+    .page-title { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+    .page-note  { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+    .section-label {
+      font-size: 12px; font-weight: 700; letter-spacing: .04em;
+      color: var(--muted); text-transform: uppercase;
+      margin: 32px 0 12px;
+    }
+    .grid {
+      display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;
+    }
+
+    /* ── 대시보드 카드 (계약 selector 반영) ───────────────────── */
+    .dashboard {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      width: 100%;
+      max-width: 560px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .dashboard__header {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      align-items: center; justify-content: space-between;
+    }
+    .dashboard__header h2 { margin: 0; font-size: 18px; font-weight: 700; }
+
+    /* 상태 배지 (aria-live) — 텍스트로 상태 표기, 색은 보조 */
+    .status-badge {
+      display: inline-flex; align-items: center;
+      border-radius: 999px;
+      padding: 4px 12px;
+      color: #FFFFFF;
+      font-size: 13px; font-weight: 700; line-height: 1.2;
+      white-space: nowrap;
+    }
+    .status-badge--idle    { background: var(--color-status-idle); }
+    .status-badge--running { background: var(--color-status-running); }
+    .status-badge--paused  { background: var(--color-status-paused); }
+
+    /* 카운터 */
+    .dashboard__counter {
+      display: flex; flex-wrap: wrap; gap: 16px;
+    }
+    .dashboard__counter > div {
+      flex: 1 1 120px;
+      background: var(--track);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .dashboard__counter .num {
+      font-size: var(--font-size-counter); font-weight: 700; line-height: 1.1;
+    }
+    .dashboard__counter .cap { font-size: 12px; font-weight: 600; color: var(--muted); }
+
+    /* control 묶음 */
+    .dashboard__controls {
+      display: flex; flex-wrap: wrap; gap: var(--space-control-gap);
+    }
+    .dashboard__controls button {
+      flex: 1 1 auto;
+      font-size: 14px; font-weight: 600;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+    }
+    .dashboard__controls button:focus-visible {
+      outline: 2px solid var(--primary); outline-offset: 2px;
+    }
+    /* 주요 버튼 (작업 추가) */
+    .dashboard__controls button.primary {
+      background: var(--primary); border-color: var(--primary); color: #FFFFFF;
+    }
+    .dashboard__controls button.primary:hover { background: var(--primary-hover); }
+    /* 비활성 */
+    .dashboard__controls button:disabled {
+      background: var(--track); color: var(--disabled);
+      border-color: var(--border); cursor: not-allowed;
+    }
+
+    /* task 목록 */
+    .task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .task-item {
+      display: flex; justify-content: space-between; align-items: center;
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 12px; font-size: 13px; font-weight: 500;
+    }
+    .task-item .state { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .task-item.is-running .state { color: var(--color-status-running); }
+    .task-item.is-failed  .state { color: #DC2626; }
+    .task-empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
+
+    /* 반응형 프레임 (320px 시뮬레이션) */
+    .frame-320 {
+      width: 320px; border: 2px dashed var(--primary);
+      border-radius: 12px; padding: 8px; background: #EFF6FF;
+    }
+    .frame-320 .frame-cap { font-size: 11px; font-weight: 700; color: var(--primary); margin: 0 0 6px; }
+    .frame-320 .dashboard { max-width: 100%; padding: 16px; }
+
+    .legend {
+      font-size: 12px; color: var(--muted);
+      display: flex; flex-wrap: wrap; gap: 8px 16px;
+    }
+    .legend .row { display: flex; align-items: center; gap: 6px; }
+    .legend .sw { width: 14px; height: 14px; border-radius: 3px; }
+
+    .note-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; max-width: 560px; font-size: 13px;
+    }
+    .note-card ul { margin: 8px 0 0; padding-left: 18px; }
+    .note-card code { background: var(--track); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1 class="page-title">pause/resume 대시보드 — 시각 시안</h1>
+  <p class="page-note">F68F701A7A-64 · 동결 UI 계약(ui-contract@v1) 시각화. 정적 mockup(런타임 아님).</p>
+
+  <!-- ── 4개 상태 배지 ─────────────────────────────────────── -->
+  <p class="section-label">상태 배지 — 색이 아니라 텍스트로 상태를 읽는다</p>
+  <div class="grid">
+    <span class="status-badge status-badge--idle">대기 중</span>
+    <span class="status-badge status-badge--running">실행 중</span>
+    <span class="status-badge status-badge--paused">정리 중 (실행 작업 마무리)</span>
+    <span class="status-badge status-badge--paused">일시정지됨</span>
+  </div>
+  <p class="page-note" style="margin-top:8px">
+    draining은 전용 class 없이 <code>status-badge--paused</code> 색을 재사용하되 텍스트로 구분한다.
+  </p>
+
+  <!-- ── 상태별 대시보드 전체 시안 ─────────────────────────── -->
+  <p class="section-label">상태별 대시보드 (idle / running / draining / paused)</p>
+  <div class="grid">
+
+    <!-- idle -->
+    <div id="dashboard-root" class="dashboard">
+      <div class="dashboard__header">
+        <h2>idle · 대기</h2>
+        <span id="status-badge" class="status-badge status-badge--idle" aria-live="polite">대기 중</span>
+      </div>
+      <div class="dashboard__counter">
+        <div><span id="active-count" class="num">0</span><span class="cap">실행 중 (activeCount)</span></div>
+        <div><span id="pending-count" class="num">0</span><span class="cap">대기 (pendingCount)</span></div>
+      </div>
+      <div class="dashboard__controls">
+        <button id="task-add" class="primary" type="button">작업 추가</button>
+        <button id="task-pause" type="button" aria-label="실행 일시정지" disabled>일시정지</button>
+        <button id="task-resume" type="button" aria-label="실행 재개" disabled>재개</button>
+      </div>
+      <ul id="task-list" class="task-list">
+        <li class="task-empty">추가된 작업 없음</li>
+      </ul>
+    </div>
+
+    <!-- running -->
+    <div class="dashboard">
+      <div class="dashboard__header">
+        <h2>running · 실행</h2>
+        <span class="status-badge status-badge--running" aria-live="polite">실행 중</span>
+      </div>
+      <div class="dashboard__counter">
+        <div><span class="num">2</span><span class="cap">실행 중 (activeCount)</span></div>
+        <div><span class="num">3</span><span class="cap">대기 (pendingCount)</span></div>
+      </div>
+      <div class="dashboard__controls">
+        <button class="primary" type="button">작업 추가</button>
+        <button type="button" aria-label="실행 일시정지">일시정지</button>
+        <button type="button" aria-label="실행 재개" disabled>재개</button>
+      </div>
+      <ul class="task-list">
+        <li class="task-item is-running"><span>작업 #1</span><span class="state">실행 중</span></li>
+        <li class="task-item is-running"><span>작업 #2</span><span class="state">실행 중</span></li>
+        <li class="task-item"><span>작업 #3</span><span class="state">대기</span></li>
+      </ul>
+    </div>
+
+    <!-- draining -->
+    <div class="dashboard">
+      <div class="dashboard__header">
+        <h2>draining · 정리 중</h2>
+        <span class="status-badge status-badge--paused" aria-live="polite">정리 중 (실행 작업 마무리)</span>
+      </div>
+      <div class="dashboard__counter">
+        <div><span class="num">1</span><span class="cap">실행 중 (activeCount)</span></div>
+        <div><span class="num">4</span><span class="cap">대기 (pendingCount)</span></div>
+      </div>
+      <div class="dashboard__controls">
+        <button class="primary" type="button">작업 추가</button>
+        <button type="button" aria-label="실행 일시정지">일시정지</button>
+        <button type="button" aria-label="실행 재개">재개</button>
+      </div>
+      <ul class="task-list">
+        <li class="task-item is-running"><span>작업 #1</span><span class="state">실행 중 (마무리)</span></li>
+        <li class="task-item"><span>작업 #2</span><span class="state">대기 (신규 미시작)</span></li>
+      </ul>
+    </div>
+
+    <!-- paused -->
+    <div class="dashboard">
+      <div class="dashboard__header">
+        <h2>paused · 일시정지</h2>
+        <span class="status-badge status-badge--paused" aria-live="polite">일시정지됨</span>
+      </div>
+      <div class="dashboard__counter">
+        <div><span class="num">0</span><span class="cap">실행 중 (activeCount)</span></div>
+        <div><span class="num">4</span><span class="cap">대기 (pendingCount)</span></div>
+      </div>
+      <div class="dashboard__controls">
+        <button class="primary" type="button">작업 추가</button>
+        <button type="button" aria-label="실행 일시정지" disabled>일시정지</button>
+        <button type="button" aria-label="실행 재개">재개</button>
+      </div>
+      <ul class="task-list">
+        <li class="task-item"><span>작업 #2</span><span class="state">대기</span></li>
+        <li class="task-item"><span>작업 #3</span><span class="state">대기</span></li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- ── control 상태(활성/비활성/포커스) ──────────────────── -->
+  <p class="section-label">control 상태 — 활성 / 비활성 / 포커스 링</p>
+  <div class="dashboard" style="gap:12px">
+    <div class="dashboard__controls">
+      <button class="primary" type="button">작업 추가 (활성)</button>
+      <button type="button" aria-label="실행 일시정지">일시정지 (활성)</button>
+      <button type="button" aria-label="실행 재개" disabled>재개 (비활성)</button>
+    </div>
+    <p class="page-note" style="margin:0">
+      비활성 버튼은 <code>disabled</code> 속성으로 색 + 접근성 상태를 함께 노출한다.
+      키보드 포커스 시 <code>:focus-visible</code> 파랑 outline(2px)이 나타난다.
+    </p>
+  </div>
+
+  <!-- ── 320px 반응형 ──────────────────────────────────────── -->
+  <p class="section-label">320px 반응형 — controls wrap, 가로 스크롤 없음</p>
+  <div class="frame-320">
+    <p class="frame-cap">viewport 320px</p>
+    <div class="dashboard">
+      <div class="dashboard__header">
+        <h2>running</h2>
+        <span class="status-badge status-badge--running" aria-live="polite">실행 중</span>
+      </div>
+      <div class="dashboard__counter">
+        <div><span class="num">2</span><span class="cap">실행 중</span></div>
+        <div><span class="num">3</span><span class="cap">대기</span></div>
+      </div>
+      <div class="dashboard__controls">
+        <button class="primary" type="button">작업 추가</button>
+        <button type="button" aria-label="실행 일시정지">일시정지</button>
+        <button type="button" aria-label="실행 재개" disabled>재개</button>
+      </div>
+      <ul class="task-list">
+        <li class="task-item is-running"><span>작업 #1</span><span class="state">실행 중</span></li>
+        <li class="task-item"><span>작업 #2</span><span class="state">대기</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── 접근성 요약 ───────────────────────────────────────── -->
+  <p class="section-label">접근성 · 색상 대비 (동결 계약 5.5)</p>
+  <div class="note-card">
+    <div class="legend">
+      <span class="row"><span class="sw" style="background:var(--color-status-idle)"></span> idle #475569 · 흰 텍스트 7.4:1</span>
+      <span class="row"><span class="sw" style="background:var(--color-status-running)"></span> running #15803D · 4.54:1</span>
+      <span class="row"><span class="sw" style="background:var(--color-status-paused)"></span> paused/draining #B45309 · 4.6:1</span>
+    </div>
+    <ul>
+      <li>모든 상태는 <strong>색이 아니라 배지 텍스트</strong>로 구분 — 흑백/색맹 환경 정보 손실 0.</li>
+      <li><code>#status-badge</code> 는 <code>aria-live="polite"</code> 로 상태 변경 낭독.</li>
+      <li><code>#task-pause</code> / <code>#task-resume</code> 는 명시적 <code>aria-label</code> 보유.</li>
+      <li>모든 control은 네이티브 <code>&lt;button&gt;</code> — Tab 포커스 + Enter/Space 실행.</li>
+      <li>배지 fill 색은 모두 흰색 텍스트 대비 WCAG AA(4.5:1) 이상.</li>
+    </ul>
+  </div>
+</body>
+</html>

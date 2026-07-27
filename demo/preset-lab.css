@@ -1,0 +1,186 @@
+/* 동시성 프리셋 비교 UI 스타일 (F68F701A7A-71)
+   §5.4 design token 이름은 frozen — 이름을 변경/재정의하지 않고 값만 정의한다. */
+:root {
+	--color-preset-active: #1d4ed8; /* 선택된 프리셋 강조색 */
+	--color-preset-idle: #e2e8f0;   /* 미선택 프리셋 색 */
+	--color-metric-value: #0f766e;  /* 카운터 수치 색 */
+	--space-preset-gap: 0.75rem;    /* 프리셋 control 간 간격 */
+	--font-metric-size: 2.25rem;    /* 카운터 수치 글꼴 크기 */
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+	line-height: 1.5;
+	color: #0f172a;
+	background: #f8fafc;
+}
+
+main {
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 1.5rem 1rem;
+}
+
+.preset-lab {
+	background: #ffffff;
+	border: 1px solid #e2e8f0;
+	border-radius: 12px;
+	padding: 1.5rem;
+}
+
+.preset-lab__intro {
+	color: #475569;
+}
+
+/* §5.6 반응형: 프리셋 controls는 기본 가로 배치, 480px 미만에서 세로 stack. */
+.preset-lab__controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-preset-gap);
+	margin-bottom: 1rem;
+}
+
+.preset-lab__preset {
+	flex: 1 1 auto;
+	min-width: 0; /* 320px에서 가로 overflow 방지 */
+	padding: 0.75rem 1rem;
+	font-size: 1rem;
+	cursor: pointer;
+	color: #0f172a;
+	background: var(--color-preset-idle);
+	border: 2px solid transparent;
+	border-radius: 8px;
+}
+
+.preset-lab__preset:focus-visible {
+	outline: 3px solid var(--color-preset-active);
+	outline-offset: 2px;
+}
+
+/* §3/§5.5: 선택된 프리셋 modifier — 색상 + border로 이중 표시. */
+.preset-lab__preset--active {
+	color: #ffffff;
+	background: var(--color-preset-active);
+	border-color: var(--color-preset-active);
+	font-weight: 600;
+}
+
+.preset-lab__run {
+	display: inline-block;
+	padding: 0.75rem 1.5rem;
+	font-size: 1rem;
+	font-weight: 600;
+	color: #ffffff;
+	background: #0f766e;
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+.preset-lab__run:focus-visible {
+	outline: 3px solid var(--color-preset-active);
+	outline-offset: 2px;
+}
+
+.preset-lab__run:disabled {
+	background: #94a3b8;
+	cursor: not-allowed;
+}
+
+.preset-lab__metrics {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-preset-gap);
+	margin: 1.25rem 0;
+}
+
+.preset-lab__metric {
+	flex: 1 1 140px;
+	min-width: 0;
+	margin: 0;
+	padding: 0.75rem 1rem;
+	background: #f1f5f9;
+	border-radius: 8px;
+	text-align: center;
+}
+
+.preset-lab__metric-label {
+	display: block;
+	font-size: 0.875rem;
+	color: #475569;
+}
+
+.preset-lab__metric-value {
+	display: block;
+	font-size: var(--font-metric-size);
+	font-weight: 700;
+	color: var(--color-metric-value);
+	font-variant-numeric: tabular-nums;
+}
+
+/* §5.3: 상태는 색상만이 아니라 상태명 텍스트로도 구분한다(data-state는 색상 보조). */
+.preset-lab__status {
+	margin: 1rem 0;
+	padding: 0.625rem 1rem;
+	border-radius: 8px;
+	font-weight: 500;
+	background: #f1f5f9;
+	border-left: 4px solid #94a3b8;
+}
+
+.preset-lab__status[data-state="running"] {
+	background: #eff6ff;
+	border-left-color: var(--color-preset-active);
+}
+
+.preset-lab__status[data-state="complete"] {
+	background: #ecfdf5;
+	border-left-color: #0f766e;
+}
+
+.preset-lab__status[data-state="error"] {
+	background: #fef2f2;
+	border-left-color: #dc2626;
+}
+
+.preset-lab__result {
+	width: 100%;
+	border-collapse: collapse;
+	margin-top: 1rem;
+}
+
+.preset-lab__result caption {
+	text-align: left;
+	font-weight: 600;
+	margin-bottom: 0.5rem;
+}
+
+.preset-lab__result th,
+.preset-lab__result td {
+	padding: 0.5rem 0.75rem;
+	border-bottom: 1px solid #e2e8f0;
+	text-align: left;
+}
+
+.preset-lab__result th {
+	background: #f8fafc;
+}
+
+/* §5.6: 480px 미만에서 프리셋 controls 세로 stack. */
+@media (max-width: 480px) {
+	.preset-lab__controls {
+		flex-direction: column;
+	}
+
+	.preset-lab__preset {
+		flex: 1 1 auto;
+		width: 100%;
+	}
+}

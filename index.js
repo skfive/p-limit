@@ -729,6 +729,23 @@ export default function pLimit(concurrency) {
 				return findFirstMatch(iterator, predicateFunction);
 			},
 		},
+		snapshot: {
+			value() {
+				// Read-only, side-effect-free O(1) point-in-time snapshot (plan §2).
+				// Returns a fresh frozen plain object each call — not a live reference,
+				// so later state changes are not reflected (re-call to re-read). Exactly
+				// four fields: activeCount/pendingCount/concurrency/isPaused. Purely
+				// additive: touches no scheduling/timing/settlement state, and is a
+				// separate entry point from `subscribe` (whose payload exposes `status`,
+				// left unchanged).
+				return Object.freeze({
+					activeCount,
+					pendingCount: queue.size,
+					concurrency,
+					isPaused: paused,
+				});
+			},
+		},
 		subscribe: {
 			value(listener) {
 				if (typeof listener !== 'function') {
@@ -831,6 +848,13 @@ export function limitFunction(function_, options) {
 				// early-termination logic is duplicated here.
 				// eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
 				return limit.find(iterable, predicateFunction);
+			},
+		},
+		snapshot: {
+			value() {
+				// Delegate to the underlying limiter so the read-only snapshot shape and
+				// values are produced in exactly one place (no logic duplication).
+				return limit.snapshot();
 			},
 		},
 		subscribe: {

@@ -82,6 +82,22 @@ export type LimitFunction = {
 	) => Promise<ReturnType[]>;
 
 	/**
+	Process an iterable or async iterable of inputs with limited concurrency, settling every result.
+
+	Like {@link LimitFunction.map}, but individual mapper rejections never reject the returned promise. Each element is reported as a `PromiseSettledResult`, so the result mirrors `Promise.allSettled` while preserving input (draw) order.
+
+	Async iterables are consumed lazily: the next value is only pulled when a concurrency slot frees up, so at most `concurrency` items are drawn but not yet settled at any time. Sync iterables retain the eager behavior.
+
+	@param iterable - An iterable or async iterable containing an argument for the given function.
+	@param mapperFunction - Promise-returning/async function.
+	@returns A promise resolving to one `PromiseSettledResult` per input, in input (draw) order.
+	*/
+	mapSettled: <Input, ReturnType> (
+		iterable: Iterable<Input> | AsyncIterable<Input>,
+		mapperFunction: (input: Input, index: number) => PromiseLike<ReturnType> | ReturnType
+	) => Promise<Array<PromiseSettledResult<ReturnType>>>;
+
+	/**
 	Returns a promise that resolves when the limiter becomes idle — no promises are currently running and none are waiting to run.
 
 	If the limiter is already idle when this is called, the returned promise resolves immediately.

@@ -1299,6 +1299,318 @@ test('limitFunction() exposes isIdle delegating to the underlying limiter', asyn
 	t.true(limitedFunction.isIdle);
 });
 
+// --- mapSettled (F68F701A7A-90) ---
+// `limit.mapSettled` mirrors `Promise.allSettled`: every element settles, an
+// individual mapper rejection becomes a per-index `{status: 'rejected', reason}`
+// entry (never rejecting the whole call), and results stay in input (draw) order.
+// Only an input-iterator failure rejects the returned promise.
+
+test('[S1] mapSettled settles all fulfilled and preserves input order (sync iterable)', async t => {
+	const limit = pLimit(2);
+
+	const results = await limit.mapSettled([1, 2, 3], async n => n * 10);
+
+	t.deepEqual(results, [
+		{status: 'fulfilled', value: 10},
+		{status: 'fulfilled', value: 20},
+		{status: 'fulfilled', value: 30},
+	]);
+});
+
+test('[S2] mapSettled records a rejected entry per failing mapper without rejecting the whole call (sync iterable)', async t => {
+	const limit = pLimit(2);
+	const error = new Error('boom');
+
+	const results = await limit.mapSettled([1, 2, 3], async n => {
+		if (n === 2) {
+			throw error;
+		}
+
+		return n * 10;
+	});
+
+	t.deepEqual(results, [
+		{status: 'fulfilled', value: 10},
+		{status: 'rejected', reason: error},
+		{status: 'fulfilled', value: 30},
+	]);
+});
+
+test('[S3] mapSettled with an empty iterable resolves to [] and never calls the mapper', async t => {
+	const limit = pLimit(2);
+	let called = 0;
+
+	const results = await limit.mapSettled([], async value => {
+		called++;
+		return value;
+	});
+
+	t.deepEqual(results, []);
+	t.is(called, 0);
+});
+
+test('[S4] mapSettled passes a 0-based index to the mapper', async t => {
+	const limit = pLimit(2);
+
+	const results = await limit.mapSettled(['a', 'b', 'c'], async (value, index) => `${index}:${value}`);
+
+	t.deepEqual(results, [
+		{status: 'fulfilled', value: '0:a'},
+		{status: 'fulfilled', value: '1:b'},
+		{status: 'fulfilled', value: '2:c'},
+	]);
+});
+
+test('[S5] mapSettled with concurrency 1 runs sequentially and preserves order', async t => {
+	const limit = pLimit(1);
+	let running = 0;
+	let maxRunning = 0;
+	const started = [];
+
+	const results = await limit.mapSettled([1, 2, 3, 4], async n => {
+		running++;
+		maxRunning = Math.max(maxRunning, running);
+		started.push(n);
+		await delay(10);
+		running--;
+		return n * 2;
+	});
+
+	t.is(maxRunning, 1);
+	t.deepEqual(started, [1, 2, 3, 4]);
+	t.deepEqual(results, [
+		{status: 'fulfilled', value: 2},
+		{status: 'fulfilled', value: 4},
+		{status: 'fulfilled', value: 6},
+		{status: 'fulfilled', value: 8},
+	]);
+});
+
+test('[A1] mapSettled settles an async iterable in draw order despite shuffled completion', async t => {
+	const limit = pLimit(2);
+
+	async function * source() {
+		for (const value of [1, 2, 3]) {
+			yield value;
+		}
+	}
+
+	const results = await limit.mapSettled(source(), async value => {
+		// Later items finish first, but the output must stay in draw order.
+		await delay((4 - value) * 10);
+		return value * 10;
+	});
+
+	t.deepEqual(results, [
+		{status: 'fulfilled', value: 10},
+		{status: 'fulfilled', value: 20},
+		{status: 'fulfilled', value: 30},
+	]);
+});
+
+test('[A2] mapSettled keeps consuming after a mapper rejects mid-stream (async iterable)', async t => {
+	const limit = pLimit(2);
+	const error = new Error('bad');
+
+	async function * source() {
+		yield 'a';
+		yield 'b'; // Fails
+		yield 'c';
+	}
+
+	const results = await limit.mapSettled(source(), async value => {
+		if (value === 'b') {
+			throw error;
+		}
+
+		return value.toUpperCase();
+	});
+
+	t.deepEqual(results, [
+		{status: 'fulfilled', value: 'A'},
+		{status: 'rejected', reason: error},
+		{status: 'fulfilled', value: 'C'},
+	]);
+});
+
+test('[A3] mapSettled lazily consumes an async iterable (in-flight <= concurrency)', async t => {
+	const limit = pLimit(2);
+	let drawn = 0;
+	let inFlight = 0;
+	let inFlightMax = 0;
+
+	async function * source() {
+		for (const value of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+			drawn++;
+			inFlight++;
+			inFlightMax = Math.max(inFlightMax, inFlight);
+			yield value;
+		}
+	}
+
+	const results = await limit.mapSettled(source(), async value => {
+		await delay(15);
+		inFlight--;
+		return value;
+	});
+
+	t.is(results.length, 10);
+	t.true(results.every(result => result.status === 'fulfilled'));
+	// Never draws more than `concurrency` items ahead of completion.
+	t.true(inFlightMax <= 2);
+	t.is(drawn, 10);
+});
+
+test('[A4] mapSettled rejects when the async iterator itself throws and cleans up once', async t => {
+	const limit = pLimit(2);
+	let returnCalls = 0;
+	const error = new Error('iterator boom');
+
+	const iterable = {
+		[Symbol.asyncIterator]() {
+			let value = 0;
+			return {
+				async next() {
+					if (value === 2) {
+						throw error;
+					}
+
+					return {value: value++, done: false};
+				},
+				async return() {
+					returnCalls++;
+					return {value: undefined, done: true};
+				},
+			};
+		},
+	};
+
+	// The input iterator failing (unlike a mapper rejection) rejects the whole call.
+	await t.throwsAsync(limit.mapSettled(iterable, async value => {
+		await delay(10);
+		return value;
+	}), {is: error});
+
+	t.is(returnCalls, 1);
+});
+
+test('[A5] mapSettled raises in-flight async draws when concurrency increases mid-flight', async t => {
+	const limit = pLimit(1);
+	let inFlight = 0;
+	let inFlightMax = 0;
+
+	async function * source() {
+		for (const value of [0, 1, 2, 3, 4, 5, 6, 7]) {
+			yield value;
+		}
+	}
+
+	const promise = limit.mapSettled(source(), async value => {
+		inFlight++;
+		inFlightMax = Math.max(inFlightMax, inFlight);
+		await delay(30);
+		inFlight--;
+		return value;
+	});
+
+	await delay(10);
+	t.is(inFlight, 1);
+
+	limit.concurrency = 3;
+
+	const results = await promise;
+	t.is(results.length, 8);
+	t.true(results.every(result => result.status === 'fulfilled'));
+	t.is(inFlightMax, 3);
+});
+
+test('[I1] mapSettled holds off new async draws while paused and completes after resume', async t => {
+	const limit = pLimit(1);
+	let drawn = 0;
+
+	async function * source() {
+		for (const value of [0, 1, 2, 3]) {
+			drawn++;
+			yield value;
+		}
+	}
+
+	const mapped = limit.mapSettled(source(), async value => {
+		await delay(15);
+		return value * 10;
+	});
+
+	// Let the first draw start, then pause before the rest are drawn.
+	await delay(5);
+	limit.pause();
+	const drawnAtPause = drawn;
+
+	await delay(40);
+	// No new draws happened while paused.
+	t.is(drawn, drawnAtPause);
+
+	limit.resume();
+	const results = await mapped;
+
+	t.deepEqual(results, [
+		{status: 'fulfilled', value: 0},
+		{status: 'fulfilled', value: 10},
+		{status: 'fulfilled', value: 20},
+		{status: 'fulfilled', value: 30},
+	]);
+	t.is(drawn, 4);
+});
+
+test('[I2] mapSettled absorbs clearQueue-rejected pending tasks as rejected entries without rejecting the whole call', async t => {
+	const limit = pLimit(1);
+	const reason = new Error('cleared');
+
+	const mapped = limit.mapSettled([1, 2, 3], async n => {
+		await delay(20);
+		return n * 10;
+	});
+
+	// Concurrency 1: index 0 is active, indexes 1 and 2 wait in the queue.
+	await Promise.resolve();
+	t.is(limit.activeCount, 1);
+	t.is(limit.pendingCount, 2);
+
+	limit.clearQueue(reason);
+	t.is(limit.pendingCount, 0);
+
+	const results = await mapped;
+
+	t.deepEqual(results, [
+		{status: 'fulfilled', value: 10},
+		{status: 'rejected', reason},
+		{status: 'rejected', reason},
+	]);
+});
+
+test('[I3] mapSettled keeps the limiter non-idle until it settles, then onIdle resolves', async t => {
+	const limit = pLimit(1);
+
+	async function * source() {
+		yield * [0, 1, 2, 3];
+	}
+
+	const mapped = limit.mapSettled(source(), async value => {
+		await delay(15);
+		return value;
+	});
+
+	t.false(limit.isIdle);
+
+	const idle = limit.onIdle();
+	// While the lazy map is still drawing, the limiter must stay non-idle.
+	t.true(await isStillPending(idle, 40));
+
+	await mapped;
+	await idle;
+	t.true(limit.isIdle);
+	t.is(limit.activeCount, 0);
+});
+
 // --- isSaturated (F68F701A7A-36) ---
 
 test('isSaturated is false for a freshly created limiter', t => {

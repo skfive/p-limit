@@ -56,3 +56,20 @@ expectError(pLimit({concurrency: 1, rejectOnClear: 'nope'}));
 // LimitFunction.map accepts iterables
 expectType<Promise<string[]>>(limit.map(new Set(['a', 'b', 'c']), async x => x + x));
 expectType<Promise<number[]>>(limit.map([1, 2, 3].values(), async x => x * 2));
+
+// [T1] LimitFunction.mapSettled resolves to input-ordered PromiseSettledResult entries
+expectType<Promise<Array<PromiseSettledResult<number>>>>(limit.mapSettled([1], async n => n));
+
+// [T2] mapSettled accepts an async iterable with the same settled return type
+async function * asyncSource(): AsyncGenerator<number> {
+	yield 1;
+}
+
+expectType<Promise<Array<PromiseSettledResult<number>>>>(limit.mapSettled(asyncSource(), async n => n));
+
+// [T3] the mapper's `index` parameter is inferred as `number`
+const settledWithIndex = limit.mapSettled(['a', 'b'], async (value, index) => {
+	expectType<number>(index);
+	return value;
+});
+expectType<Promise<Array<PromiseSettledResult<string>>>>(settledWithIndex);

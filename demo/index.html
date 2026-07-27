@@ -5,6 +5,8 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>p-limit 상태 Inspector</title>
 	<link rel="stylesheet" href="inspector.css">
+	<!-- 대기열 압력 히스토리 패널 스타일 (F68F701A7A-83, additive) -->
+	<link rel="stylesheet" href="demo.css">
 	<!-- 라이브러리 코어(index.js)가 소비하는 bare specifier를 브라우저에서 해석하기 위한 import map. -->
 	<script type="importmap">
 	{
@@ -51,8 +53,34 @@
 				<button type="button" id="inspector-resume" class="inspector__control" aria-label="재개 (resume)">재개</button>
 			</div>
 		</section>
+
+		<!-- 대기열 압력 히스토리 패널 (F68F701A7A-83, additive) -->
+		<!-- #queue-pressure-panel: 패널 루트 컨테이너 (계약 §3.1) -->
+		<section id="queue-pressure-panel" class="queue-pressure" aria-labelledby="queue-pressure-title">
+			<h2 id="queue-pressure-title">대기열 압력 히스토리</h2>
+			<p class="queue-pressure__intro">
+				작업을 추가하면 limiter의 대기열 압력(실행 중 active / 대기 중 pending) 변화를
+				시간순 히스토리로 기록합니다. 색상과 함께 상태·값을 텍스트로도 표시합니다.
+			</p>
+
+			<!-- 실행 control 그룹 (§6 명시적 aria-label + Tab/Enter/Space 접근) -->
+			<div class="queue-pressure__controls" role="group" aria-label="대기열 압력 히스토리 제어">
+				<!-- additive demo 트리거: 동결 selector가 아니며 계약 요소를 대체하지 않는다. -->
+				<button type="button" id="queue-pressure-enqueue" class="queue-pressure__enqueue" aria-label="작업 추가">작업 추가</button>
+				<!-- #queue-pressure-reset: 초기화 버튼 (§3.1, §6 aria-label="히스토리 초기화") -->
+				<button type="button" id="queue-pressure-reset" class="queue-pressure__reset" aria-label="히스토리 초기화">초기화</button>
+			</div>
+
+			<!-- #queue-pressure-status: 현재 상태 문구를 화면 텍스트로 표시 (§3.1, §5) -->
+			<p id="queue-pressure-status" class="queue-pressure__status" role="status" data-state="empty"></p>
+
+			<!-- #queue-pressure-history-list: 히스토리 항목 목록 (§3.1, §6 aria-live="polite") -->
+			<ul id="queue-pressure-history-list" class="queue-pressure__list" aria-live="polite" aria-label="대기열 압력 히스토리 목록"></ul>
+		</section>
 	</main>
 
 	<script type="module" src="inspector.js"></script>
+	<!-- 대기열 압력 히스토리 패널 런타임 (F68F701A7A-83, additive) -->
+	<script type="module" src="demo.js"></script>
 </body>
 </html>

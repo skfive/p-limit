@@ -1,0 +1,115 @@
+/*
+ * 대기열 압력 히스토리 패널 스타일 (F68F701A7A-83, additive)
+ * planner 동결 UI 계약(docs/plans/queue-pressure-history-plan.md §3~§7)을 그대로 소비한다.
+ * §4 design token 값을 변경하지 않으며, 기존 demo CSS(inspector.css 등) 규칙을 재정의하지 않는다.
+ */
+
+/* §4 디자인 토큰(동결 — 값 변경 금지). 패널 범위에서만 소비한다. */
+.queue-pressure {
+	--qp-color-active: #2563eb;
+	--qp-color-pending: #f59e0b;
+	--qp-space-gap: 8px;
+	--qp-radius: 6px;
+	--qp-font-size: 14px;
+
+	box-sizing: border-box;
+	max-width: 640px;
+	margin: var(--qp-space-gap) auto;
+	padding: calc(var(--qp-space-gap) * 2);
+	border: 1px solid #e5e7eb;
+	border-radius: var(--qp-radius);
+	font-size: var(--qp-font-size);
+	font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+	line-height: 1.5;
+}
+
+.queue-pressure *,
+.queue-pressure *::before,
+.queue-pressure *::after {
+	box-sizing: border-box;
+}
+
+.queue-pressure__intro {
+	margin: 0 0 var(--qp-space-gap);
+	color: #374151;
+}
+
+/* §6 control 그룹: 좁은 폭에서도 세로로 자연스럽게 배치. */
+.queue-pressure__controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--qp-space-gap);
+	margin-bottom: var(--qp-space-gap);
+}
+
+.queue-pressure__enqueue,
+.queue-pressure__reset {
+	min-height: 40px;
+	padding: 0 calc(var(--qp-space-gap) * 1.5);
+	border: 1px solid #d1d5db;
+	border-radius: var(--qp-radius);
+	background: #f9fafb;
+	color: #111827;
+	font-size: var(--qp-font-size);
+	cursor: pointer;
+}
+
+.queue-pressure__enqueue:hover,
+.queue-pressure__reset:hover {
+	background: #f3f4f6;
+}
+
+/* 키보드 포커스 가시성(§6 접근성): 색상 외 윤곽으로도 인지 가능. */
+.queue-pressure__enqueue:focus-visible,
+.queue-pressure__reset:focus-visible {
+	outline: 2px solid var(--qp-color-active);
+	outline-offset: 2px;
+}
+
+.queue-pressure__enqueue:disabled,
+.queue-pressure__reset:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+/* §5 상태 문구: 항상 화면 텍스트로 표시. 색상은 보조 신호일 뿐이다. */
+.queue-pressure__status {
+	margin: 0 0 var(--qp-space-gap);
+	padding: calc(var(--qp-space-gap) / 2) var(--qp-space-gap);
+	border-radius: var(--qp-radius);
+	background: #f3f4f6;
+	color: #374151;
+	font-weight: 600;
+}
+
+/* §7 반응형: 히스토리 목록은 세로로 쌓이며 320px에서 가로 스크롤/overflow가 없다. */
+.queue-pressure__list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--qp-space-gap);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.queue-pressure__item {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--qp-space-gap);
+	padding: calc(var(--qp-space-gap) / 2) var(--qp-space-gap);
+	border: 1px solid #e5e7eb;
+	border-radius: var(--qp-radius);
+	background: #ffffff;
+	overflow-wrap: anywhere;
+}
+
+/* §4/§6: active/pending 값을 색상과 함께 텍스트로 표시(색상 단독 구분 금지). */
+.queue-pressure__active {
+	color: var(--qp-color-active);
+	font-weight: 600;
+}
+
+.queue-pressure__pending {
+	color: var(--qp-color-pending);
+	font-weight: 600;
+}

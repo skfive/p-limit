@@ -163,6 +163,13 @@ export default function pLimit(concurrency) {
 		enqueue(function_, resolve, reject, arguments_);
 	});
 
+	// Eagerly schedule every element of a sync iterable through the existing
+	// scheduling path (`generator`), preserving input (draw) order. Shared by the
+	// sync branch of `map` and `mapSettled` so the draw construction lives in one
+	// place; only the aggregation (`Promise.all` vs `Promise.allSettled`) differs.
+	const mapEager = (iterable, function_) =>
+		Array.from(iterable, (value, index) => generator(function_, value, index));
+
 	// Lazily consume an async iterator, keeping at most `concurrency` items
 	// "drawn but not yet settled" at any time (no pre-loading). Results are
 	// stored by draw order, so completion order does not affect the output.
@@ -454,8 +461,7 @@ export default function pLimit(concurrency) {
 					return mapAsyncIterable(iterable[Symbol.asyncIterator](), function_, false);
 				}
 
-				const promises = Array.from(iterable, (value, index) => generator(function_, value, index));
-				return Promise.all(promises);
+				return Promise.all(mapEager(iterable, function_));
 			},
 		},
 		mapSettled: {
@@ -469,8 +475,7 @@ export default function pLimit(concurrency) {
 					return mapAsyncIterable(iterable[Symbol.asyncIterator](), function_, true);
 				}
 
-				const promises = Array.from(iterable, (value, index) => generator(function_, value, index));
-				return Promise.allSettled(promises);
+				return Promise.allSettled(mapEager(iterable, function_));
 			},
 		},
 		subscribe: {

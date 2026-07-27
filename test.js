@@ -2918,3 +2918,186 @@ test('numeric pLimit(2) usage stays backward compatible', async t => {
 	await Promise.all(promises);
 	t.is(maxRunning, 2);
 });
+
+// --- snapshot().status derivation (F68F701A7A-126) ---
+
+// A manually-resolvable deferred so tests drive task settlement deterministically
+// (no wall-clock sleeps): a task keeps "running" until we open its gate.
+const makeGate = () => {
+	let open;
+	const promise = new Promise(resolve => {
+		open = resolve;
+	});
+	return {promise, open};
+};
+
+test('snapshot().status is "idle" on a fresh limiter (and stays additive)', t => {
+	const limit = pLimit(3);
+	const snap = limit.snapshot();
+
+	t.is(snap.status, 'idle');
+	// Existing fields are preserved unchanged; only `status` is additive.
+	t.deepEqual(Object.keys(snap).sort(), ['activeCount', 'concurrency', 'isPaused', 'pendingCount', 'status']);
+	t.is(snap.activeCount, 0);
+	t.is(snap.pendingCount, 0);
+	t.is(snap.concurrency, 3);
+	t.is(snap.isPaused, false);
+	t.true(Object.isFrozen(snap));
+});
+
+test('snapshot().status is "active" while a task runs with a free slot', async t => {
+	const limit = pLimit(2);
+	const gate = makeGate();
+
+	limit(() => gate.promise);
+	t.is(limit.activeCount, 1);
+	t.is(limit.snapshot().status, 'active');
+
+	gate.open();
+	await limit.onIdle();
+	t.is(limit.snapshot().status, 'idle');
+});
+
+test('snapshot().status is "saturated" when activeCount reaches a finite concurrency', async t => {
+	const limit = pLimit(1);
+	const gate = makeGate();
+
+	limit(() => gate.promise);
+	t.is(limit.activeCount, 1);
+	t.is(limit.snapshot().status, 'saturated');
+
+	// Completing the running task restores idle (AC2).
+	gate.open();
+	await limit.onIdle();
+	t.is(limit.snapshot().status, 'idle');
+});
+
+test('snapshot().status "paused" takes priority over "saturated"', async t => {
+	const limit = pLimit(1);
+	const gate = makeGate();
+
+	limit(() => gate.promise);
+	t.is(limit.snapshot().status, 'saturated');
+
+	limit.pause();
+	t.is(limit.snapshot().status, 'paused'); // Paused wins over saturated
+
+	limit.resume();
+	t.is(limit.snapshot().status, 'saturated');
+
+	gate.open();
+	await limit.onIdle();
+});
+
+test('snapshot().status "paused" takes priority over "idle" with nothing running', t => {
+	const limit = pLimit(2);
+
+	limit.pause();
+	t.is(limit.activeCount, 0);
+	t.is(limit.snapshot().status, 'paused'); // Paused wins over idle
+
+	limit.resume();
+	t.is(limit.snapshot().status, 'idle');
+});
+
+test('snapshot().status never reports "saturated" for infinite concurrency', async t => {
+	const limit = pLimit(Number.POSITIVE_INFINITY);
+	t.is(limit.snapshot().status, 'idle');
+
+	const gate = makeGate();
+	limit(() => gate.promise);
+	limit(() => gate.promise);
+	t.is(limit.activeCount, 2);
+	// Running >= 1 but an infinite limit is never saturated.
+	t.is(limit.snapshot().status, 'active');
+	t.not(limit.snapshot().status, 'saturated');
+
+	gate.open();
+	await limit.onIdle();
+	t.is(limit.snapshot().status, 'idle');
+});
+
+test('snapshot().status returns to "idle" after clearQueue discards pending work', async t => {
+	const limit = pLimit(1);
+	const gate = makeGate();
+
+	limit(() => gate.promise); // Running -> saturated
+	limit(() => gate.promise); // Queued while the slot is busy
+	t.is(limit.snapshot().status, 'saturated');
+	t.is(limit.snapshot().pendingCount, 1);
+
+	// Clearing only pending work leaves the running task, so status stays saturated.
+	limit.clearQueue();
+	t.is(limit.snapshot().pendingCount, 0);
+	t.is(limit.snapshot().status, 'saturated');
+
+	gate.open();
+	await limit.onIdle();
+	t.is(limit.snapshot().status, 'idle');
+});
+
+test('a pending-only, non-paused moment derives "idle" (pendingCount does not affect status)', async t => {
+	const limit = pLimit(1);
+	const gateA = makeGate();
+	const gateB = makeGate();
+	const pendingOnlyStatuses = [];
+
+	// The settle transition fires with the running task gone but the next one not
+	// yet promoted: activeCount === 0 while pendingCount > 0 and not paused.
+	const unsubscribe = limit.subscribe(snap => {
+		if (snap.activeCount === 0 && snap.pendingCount > 0) {
+			pendingOnlyStatuses.push(snap.status);
+		}
+	});
+
+	limit(() => gateA.promise);
+	limit(() => gateB.promise); // Queued behind A
+	gateA.open();
+	await delay(0); // Let A settle so the settle transition emits
+
+	gateB.open();
+	await limit.onIdle();
+	unsubscribe();
+
+	// Here pendingCount > 0 with nothing running (non-paused) => 'idle', never 'saturated'.
+	t.true(pendingOnlyStatuses.includes('idle'));
+	t.false(pendingOnlyStatuses.includes('saturated'));
+});
+
+test('snapshot().status matches the subscribe() payload status for the same moment', async t => {
+	const limit = pLimit(1);
+	const gate = makeGate();
+	let lastPayloadStatus;
+
+	const unsubscribe = limit.subscribe(snap => {
+		lastPayloadStatus = snap.status;
+	});
+
+	limit(() => gate.promise); // Start transition emits 'saturated'
+	t.is(limit.snapshot().status, 'saturated');
+	t.is(lastPayloadStatus, 'saturated'); // Surface consistency (INV-5)
+
+	gate.open();
+	await limit.onIdle();
+	unsubscribe();
+});
+
+test('limitFunction().snapshot().status delegates to the underlying limiter', async t => {
+	const gate = makeGate();
+	const limited = limitFunction(() => gate.promise, {concurrency: 1});
+
+	t.is(limited.snapshot().status, 'idle');
+
+	limited();
+	t.is(limited.snapshot().status, 'saturated');
+
+	limited.pause();
+	t.is(limited.snapshot().status, 'paused');
+
+	limited.resume();
+	t.is(limited.snapshot().status, 'saturated');
+
+	gate.open();
+	await limited.onIdle();
+	t.is(limited.snapshot().status, 'idle');
+});

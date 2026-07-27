@@ -39,6 +39,14 @@ expectType<boolean>(limit.isIdle);
 
 expectType<boolean>(limit.isSaturated);
 
+// [S1] snapshot() returns the core state fields plus the derived status literal union
+const snap = limit.snapshot();
+expectType<number>(snap.activeCount);
+expectType<number>(snap.pendingCount);
+expectType<number>(snap.concurrency);
+expectType<boolean>(snap.isPaused);
+expectType<'idle' | 'active' | 'saturated' | 'paused'>(snap.status);
+
 expectType<void>(limit.pause());
 expectType<void>(limit.resume());
 expectType<boolean>(limit.isPaused);
@@ -52,6 +60,10 @@ expectType<boolean>(lf.isSaturated);
 expectType<void>(lf.pause());
 expectType<void>(lf.resume());
 expectType<boolean>(lf.isPaused);
+// [S2] limitFunction() exposes the same snapshot status typing via delegation
+const lfSnap = lf.snapshot();
+expectType<'idle' | 'active' | 'saturated' | 'paused'>(lfSnap.status);
+expectType<boolean>(lfSnap.isPaused);
 expectType<number>(lf.clearQueue());
 expectType<number>(lf.clearQueue(new Error('reason')));
 

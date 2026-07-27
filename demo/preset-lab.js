@@ -40,9 +40,10 @@ function delay(ms) {
  * 동일 배치를 스케줄하고, activeCount/pendingCount를 onProgress로 통지한다.
  * DOM과 분리된 순수 오케스트레이션이라 헤드리스로 검증 가능하다.
  */
-export async function runPreset({concurrency, batchSize = BATCH_SIZE, makeTask, onProgress}) {
+export async function runPreset({concurrency, batchSize = BATCH_SIZE, makeTask, onProgress, onTaskComplete}) {
 	const limit = pLimit(concurrency);
 	let maxActive = 0;
+	let completed = 0;
 
 	const report = () => {
 		if (limit.activeCount > maxActive) {
@@ -58,7 +59,19 @@ export async function runPreset({concurrency, batchSize = BATCH_SIZE, makeTask, 
 	const tasks = Array.from({length: batchSize}, (_, index) => limit(async () => {
 		report();
 		const result = await makeTask(index);
+		completed += 1;
 		report();
+		// §4: 각 태스크 완료 시 결과 표에 행을 추가하도록 통지(완료 순서·누적 최대 동시·경과).
+		if (typeof onTaskComplete === 'function') {
+			onTaskComplete({
+				index,
+				completed,
+				total: batchSize,
+				maxActive,
+				elapsedMs: now() - start,
+			});
+		}
+
 		return result;
 	}));
 
@@ -125,13 +138,13 @@ export function initPresetLab(doc = globalThis.document) {
 		}
 	}
 
-	function addResultRow(label, maxActive, elapsedMs) {
+	function addResultRow(label, progressText, maxActive, elapsedMs) {
 		if (!resultBody) {
 			return;
 		}
 
 		const row = doc.createElement('tr');
-		const cells = [label, String(maxActive), String(elapsedMs)];
+		const cells = [label, progressText, String(maxActive), String(elapsedMs)];
 		for (const value of cells) {
 			const cell = doc.createElement('td');
 			cell.textContent = value;
@@ -158,14 +171,18 @@ export function initPresetLab(doc = globalThis.document) {
 		resetCounters();
 
 		try {
-			const {maxActive, elapsedMs} = await runPreset({
+			await runPreset({
 				concurrency: preset.concurrency,
 				makeTask: () => delay(TASK_DELAY_MS),
 				onProgress: ({active, pending}) => setCounters(active, pending),
+				// §4: 각 태스크 완료마다 결과 표에 행 추가. 마지막 행(N/N)의
+				// 최대 동시 실행·경과가 곧 프리셋 최종 비교값이 된다(AC2).
+				onTaskComplete: ({completed, total, maxActive, elapsedMs}) => {
+					addResultRow(preset.label, `${completed}/${total}`, maxActive, Math.round(elapsedMs));
+				},
 			});
 			// §5.3 complete: 최종 카운터 0/0, 결과 표 채움.
 			setCounters(0, 0);
-			addResultRow(preset.label, maxActive, Math.round(elapsedMs));
 			setState('complete');
 		} catch {
 			// E3: 태스크 reject → error 진입, 카운터 초기화, 실행 control 재사용 가능.

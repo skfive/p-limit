@@ -49,14 +49,15 @@
 			<!-- 상태 메시지 (§5.3 상태명 화면 텍스트, §5.5 aria-live) -->
 			<p id="status-message" class="preset-lab__status" role="status" aria-live="polite" data-state="idle">상태: 대기 중 — 프리셋을 선택하고 실행하세요</p>
 
-			<!-- 결과 표 (§5.2 .preset-lab__result): 프리셋별 최대 동시 실행 수·완료 시간 비교 -->
+			<!-- 결과 표 (§5.2 .preset-lab__result): 각 태스크 완료 시 행 추가(§4) + 프리셋별 최대 동시 실행 수·완료 시간 비교 -->
 			<table id="result-table" class="preset-lab__result">
-				<caption>프리셋별 실행 결과 비교</caption>
+				<caption>태스크 완료별 실행 결과 (마지막 행 = 프리셋 최종 비교)</caption>
 				<thead>
 					<tr>
 						<th scope="col">프리셋</th>
+						<th scope="col">완료 태스크</th>
 						<th scope="col">최대 동시 실행</th>
-						<th scope="col">완료 시간(ms)</th>
+						<th scope="col">경과(ms)</th>
 					</tr>
 				</thead>
 				<tbody></tbody>

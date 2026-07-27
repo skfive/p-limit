@@ -1,0 +1,134 @@
+/*
+ * 실시간 Inspector demo 스타일 (F68F701A7A-77)
+ * planner 동결 계약(docs/plans/subscribe-inspector-plan.md §4)의 design token 이름과
+ * CSS class를 그대로 선언·소비한다. 토큰 이름·class·상태 텍스트는 재정의하지 않는다.
+ * (구체 색상값은 접근성 대비를 만족하도록 선언하되, 색상은 항상 화면 텍스트 라벨과 병행한다.)
+ */
+
+.inspector {
+	/* §4.5 design token(동결): 상태별 색 + metric/control 간격 */
+	--inspector-color-idle: #475569;
+	--inspector-color-active: #15803d;
+	--inspector-color-saturated: #b45309;
+	--inspector-color-paused: #6d28d9;
+	--inspector-space-gap: 0.75rem;
+
+	max-width: 32rem;
+	margin: 2rem auto;
+	padding: 1.5rem;
+	font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	color: #1f2937;
+	border: 1px solid #e5e7eb;
+	border-radius: 0.75rem;
+}
+
+/* box-sizing을 컴포넌트 내부로 한정해 320px 이상에서 overflow가 없도록 한다(§4.7). */
+.inspector,
+.inspector * {
+	box-sizing: border-box;
+}
+
+.inspector__intro {
+	margin: 0 0 var(--inspector-space-gap);
+	line-height: 1.5;
+	color: #4b5563;
+}
+
+/* §4.4 상태 배지: 화면 텍스트 라벨 + data-status로 §4.5 token 색을 선택(색상은 보조). */
+.inspector__badge {
+	display: inline-block;
+	padding: 0.35rem 0.9rem;
+	margin-bottom: var(--inspector-space-gap);
+	font-weight: 700;
+	color: #fff;
+	border-radius: 999px;
+	background: var(--inspector-color-idle);
+}
+
+.inspector__badge[data-status="idle"] {
+	background: var(--inspector-color-idle);
+}
+
+.inspector__badge[data-status="active"] {
+	background: var(--inspector-color-active);
+}
+
+.inspector__badge[data-status="saturated"] {
+	background: var(--inspector-color-saturated);
+}
+
+.inspector__badge[data-status="paused"] {
+	background: var(--inspector-color-paused);
+}
+
+/* 지표 영역: gap 토큰으로 간격을 주고 wrap 허용해 좁은 폭에서 overflow 방지. */
+.inspector__metrics {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--inspector-space-gap);
+	margin-bottom: var(--inspector-space-gap);
+}
+
+.inspector__metric {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 8rem;
+	min-width: 0;
+	margin: 0;
+	padding: 0.75rem;
+	background: #f9fafb;
+	border-radius: 0.5rem;
+}
+
+.inspector__metric-label {
+	font-size: 0.8rem;
+	color: #6b7280;
+}
+
+.inspector__metric-value {
+	font-size: 1.5rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+/* §4.3 control 그룹: 기본은 가로 배치, gap 토큰 간격. */
+.inspector__controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--inspector-space-gap);
+}
+
+.inspector__control {
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 0.6rem 1rem;
+	font-size: 1rem;
+	color: #1f2937;
+	background: #fff;
+	border: 1px solid #d1d5db;
+	border-radius: 0.5rem;
+	cursor: pointer;
+}
+
+.inspector__control:hover:not(:disabled) {
+	background: #f3f4f6;
+}
+
+/* 키보드 Tab 접근 시 명확한 포커스 링(§4.6). */
+.inspector__control:focus-visible {
+	outline: 2px solid var(--inspector-color-active);
+	outline-offset: 2px;
+}
+
+.inspector__control:disabled {
+	color: #9ca3af;
+	cursor: not-allowed;
+	opacity: 0.6;
+}
+
+/* §4.7 반응형: 480px 미만에서 controls를 세로로 스택한다. */
+@media (max-width: 479px) {
+	.inspector__controls {
+		flex-direction: column;
+	}
+}

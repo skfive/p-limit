@@ -199,6 +199,90 @@ test('listener는 구독 순서대로 통지된다', () => {
 	assert.deepEqual(order, ['a', 'b']);
 });
 
+test('concurrency가 Infinity이면 slot이 차도 saturated가 아니다 (E1)', async () => {
+	const limit = pLimit(Number.POSITIVE_INFINITY);
+	const snapshots = [];
+	limit.subscribe(snapshot => snapshots.push(snapshot));
+
+	const tasks = [deferred(), deferred(), deferred()];
+	const promises = tasks.map(current => limit(() => current.promise));
+
+	// 여러 태스크가 동시에 실행 중이어도 무한 concurrency는 절대 saturated가 아니다
+	// (activeCount는 항상 유한하므로 activeCount >= Infinity는 false).
+	const last = snapshots.at(-1);
+	assert.equal(last.status, 'active');
+	assert.equal(last.activeCount, 3);
+	assert.equal(last.concurrency, Number.POSITIVE_INFINITY);
+	assert.equal(limit.isSaturated, false);
+	assert.ok(
+		!snapshots.some(snapshot => snapshot.status === 'saturated'),
+		'무한 concurrency에서는 saturated 통지가 발생하지 않아야 한다',
+	);
+
+	for (const current of tasks) {
+		current.resolve();
+	}
+
+	await Promise.all(promises);
+});
+
+test('listener 내부의 subscribe 재진입은 이번 순회를 건너뛰고 다음 전이부터 통지된다 (AC-8)', () => {
+	const limit = pLimit(2);
+	const calls = [];
+
+	// 자기 자신을 unsubscribe하는 listener: 이번 통지는 완료되고 이후에는 통지되지 않는다.
+	let unsubscribeSelf;
+	unsubscribeSelf = limit.subscribe(() => {
+		calls.push('self');
+		unsubscribeSelf();
+	});
+
+	// 통지 도중 새 listener를 등록하는 listener: 순회는 복사본을 돌기 때문에 새 listener는
+	// 이번 전이에서는 호출되지 않고 다음 전이부터 호출된다.
+	let lateCalls = 0;
+	let added = false;
+	limit.subscribe(() => {
+		if (!added) {
+			added = true;
+			limit.subscribe(() => {
+				lateCalls++;
+			});
+		}
+	});
+
+	// 항상 호출되는 관찰용 listener.
+	limit.subscribe(() => calls.push('observer'));
+
+	// 첫 전이: self는 호출 후 스스로 해지, observer 호출, 새 listener는 아직 미호출.
+	limit.concurrency = 3;
+	assert.deepEqual(calls, ['self', 'observer']);
+	assert.equal(lateCalls, 0, '순회 중 추가된 listener는 이번 전이에서 호출되지 않는다');
+
+	// 두 번째 전이: self는 해지되어 미호출, observer 유지, 새 listener는 이제 호출.
+	calls.length = 0;
+	limit.concurrency = 4;
+	assert.deepEqual(calls, ['observer']);
+	assert.equal(lateCalls, 1, '다음 전이부터는 추가된 listener가 호출된다');
+});
+
+test('통지 도중 아직 방문하지 않은 다른 listener를 unsubscribe하면 건너뛴다 (AC-8)', () => {
+	const limit = pLimit(2);
+	const order = [];
+
+	let unsubscribeB;
+	limit.subscribe(() => {
+		order.push('a');
+		unsubscribeB(); // 순회에서 아직 방문 전인 b를 해지.
+	});
+	unsubscribeB = limit.subscribe(() => {
+		order.push('b');
+	});
+
+	// a가 b를 해지했으므로 b는 이번 전이에서 통지되지 않는다(멤버십 재확인).
+	limit.concurrency = 3;
+	assert.deepEqual(order, ['a']);
+});
+
 test('subscribe는 함수가 아닌 인자를 거부한다', () => {
 	const limit = pLimit(1);
 	assert.throws(() => limit.subscribe(), {name: 'TypeError'});

@@ -69,6 +69,9 @@ export default function pLimit(concurrency) {
 		}
 
 		const snap = snapshot();
+		// Iterate a snapshot copy so a listener may (un)subscribe mid-notification
+		// without corrupting the walk; the copy is intentional (re-entrancy safety).
+		// eslint-disable-next-line unicorn/no-useless-spread
 		for (const listener of [...listeners]) {
 			if (!listeners.has(listener)) {
 				continue;
@@ -106,14 +109,14 @@ export default function pLimit(concurrency) {
 		if (!paused && activeCount < concurrency && queue.size > 0) {
 			activeCount++;
 			queue.dequeue().run();
-			// start transition: a queued task was promoted to running (active+1, pending-1).
+			// Start transition: a queued task was promoted to running (active+1, pending-1).
 			notifyListeners();
 		}
 	};
 
 	const next = () => {
 		activeCount--;
-		// settle transition: a running task finished (active-1), before any promotion.
+		// Settle transition: a running task finished (active-1), before any promotion.
 		notifyListeners();
 		resumeNext();
 		notifyIdle();
@@ -360,7 +363,7 @@ export default function pLimit(concurrency) {
 				}
 
 				paused = true;
-				// pause transition: status becomes 'paused'.
+				// Pause transition: status becomes 'paused'.
 				notifyListeners();
 			},
 		},
@@ -372,7 +375,7 @@ export default function pLimit(concurrency) {
 
 				paused = false;
 
-				// resume transition: status leaves 'paused' before any promotion below.
+				// Resume transition: status leaves 'paused' before any promotion below.
 				notifyListeners();
 
 				// Promote queued tasks up to the current concurrency, mirroring the
@@ -403,7 +406,7 @@ export default function pLimit(concurrency) {
 				const changed = newConcurrency !== concurrency;
 				concurrency = newConcurrency;
 
-				// concurrency-change transition, emitted only when the value actually
+				// Concurrency-change transition, emitted only when the value actually
 				// changed (plan §3.4 / E4). The microtask drain below preserves the
 				// existing timing and emits its own start transitions via resumeNext().
 				if (changed) {

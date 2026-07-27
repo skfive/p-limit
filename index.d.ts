@@ -1,3 +1,40 @@
+/**
+The derived, human-facing state of a limiter, chosen by a fixed priority order (`paused` > `saturated` > `active` > `idle`):
+
+- `'paused'` — the limiter is paused (`isPaused` is `true`); no queued task will start until `resume()`.
+- `'saturated'` — every concurrency slot is occupied (`activeCount >= concurrency`). A limiter with infinite `concurrency` is never saturated.
+- `'active'` — at least one task is running but a slot is still free.
+- `'idle'` — nothing is running.
+*/
+export type LimiterStatus = 'idle' | 'active' | 'saturated' | 'paused';
+
+/**
+An immutable snapshot of a limiter's observable state at a single moment, delivered to `subscribe()` listeners on every state transition.
+
+The object is frozen; listeners must not mutate it.
+*/
+export type LimiterSnapshot = {
+	/**
+	The number of promises that are currently running.
+	*/
+	readonly activeCount: number;
+
+	/**
+	The number of promises that are waiting to run.
+	*/
+	readonly pendingCount: number;
+
+	/**
+	The current concurrency limit (may be `Infinity`).
+	*/
+	readonly concurrency: number;
+
+	/**
+	The derived status of the limiter. See {@link LimiterStatus}.
+	*/
+	readonly status: LimiterStatus;
+};
+
 export type LimitFunction = {
 	/**
 	The number of promises that are currently running.
@@ -89,6 +126,18 @@ export type LimitFunction = {
 	pending task starts, so a paused limiter with pending tasks is never idle.
 	*/
 	readonly isPaused: boolean;
+
+	/**
+	Subscribe to limiter state changes.
+
+	The listener is called with a frozen {@link LimiterSnapshot} on every state transition — enqueueing a task, promoting a queued task to running, a running task settling, `pause()`/`resume()`, `clearQueue()` (when the queue actually shrinks), and `concurrency` changes. Listeners are notified in subscription order.
+
+	Subscribing does not emit an immediate snapshot; read `activeCount`/`pendingCount`/`concurrency` directly for the initial state. A listener that throws does not affect scheduling or the other listeners.
+
+	@param listener - Called with the latest readonly snapshot on each transition.
+	@returns An idempotent unsubscribe function. After it is called, the listener is never notified again; calling it more than once is safe.
+	*/
+	subscribe: (listener: (snapshot: Readonly<LimiterSnapshot>) => void) => () => void;
 
 	/**
 	@param fn - Promise-returning/async function.
@@ -251,6 +300,18 @@ export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
 	pending task starts, so a paused limiter with pending tasks is never idle.
 	*/
 	readonly isPaused: boolean;
+
+	/**
+	Subscribe to limiter state changes.
+
+	The listener is called with a frozen {@link LimiterSnapshot} on every state transition — enqueueing a task, promoting a queued task to running, a running task settling, `pause()`/`resume()`, `clearQueue()` (when the queue actually shrinks), and `concurrency` changes. Listeners are notified in subscription order. Delegates to the underlying limiter.
+
+	Subscribing does not emit an immediate snapshot; read `activeCount`/`pendingCount`/`concurrency` directly for the initial state. A listener that throws does not affect scheduling or the other listeners.
+
+	@param listener - Called with the latest readonly snapshot on each transition.
+	@returns An idempotent unsubscribe function. After it is called, the listener is never notified again; calling it more than once is safe.
+	*/
+	subscribe: (listener: (snapshot: Readonly<LimiterSnapshot>) => void) => () => void;
 
 	/**
 	Call the limited function.

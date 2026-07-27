@@ -28,6 +28,58 @@ export default function pLimit(concurrency) {
 	// Resolve callbacks for outstanding `onIdle()` calls awaiting the idle state.
 	const idleWaiters = new Set();
 
+	// Registered state-change listeners. Each receives a frozen snapshot on every
+	// state transition (enqueue/start/settle, pause/resume, clearQueue, concurrency
+	// change). Purely additive: with no listeners the scheduling path is untouched,
+	// preserving the exact previous timing/settlement semantics (additive integrity).
+	const listeners = new Set();
+
+	// Derive the frozen snapshot shape (frozen contract: activeCount, pendingCount,
+	// concurrency, status). `status` follows the fixed priority order:
+	// paused > saturated > active > idle. An infinite concurrency is never saturated
+	// because `activeCount` is always finite, so `activeCount >= Infinity` is false.
+	const snapshot = () => {
+		let status;
+		if (paused) {
+			status = 'paused';
+		} else if (activeCount >= concurrency) {
+			status = 'saturated';
+		} else if (activeCount > 0) {
+			status = 'active';
+		} else {
+			status = 'idle';
+		}
+
+		return Object.freeze({
+			activeCount,
+			pendingCount: queue.size,
+			concurrency,
+			status,
+		});
+	};
+
+	// Notify every listener with one shared frozen snapshot for this transition.
+	// Iterates a copy so a listener may (un)subscribe during notification without
+	// breaking the walk, and skips any listener removed mid-walk. Each call is
+	// isolated in try/catch so a throwing listener never affects scheduling or the
+	// other listeners, and never changes a task's Promise settlement semantics.
+	const notifyListeners = () => {
+		if (listeners.size === 0) {
+			return;
+		}
+
+		const snap = snapshot();
+		for (const listener of [...listeners]) {
+			if (!listeners.has(listener)) {
+				continue;
+			}
+
+			try {
+				listener(snap);
+			} catch {}
+		}
+	};
+
 	// The limiter is idle when nothing is running, nothing is queued, and no lazy
 	// `limit.map()` is still drawing. The `mapSchedulers` check prevents a false
 	// positive during the gap between a map draw settling and the next draw.
@@ -54,11 +106,15 @@ export default function pLimit(concurrency) {
 		if (!paused && activeCount < concurrency && queue.size > 0) {
 			activeCount++;
 			queue.dequeue().run();
+			// start transition: a queued task was promoted to running (active+1, pending-1).
+			notifyListeners();
 		}
 	};
 
 	const next = () => {
 		activeCount--;
+		// settle transition: a running task finished (active-1), before any promotion.
+		notifyListeners();
 		resumeNext();
 		notifyIdle();
 	};
@@ -90,6 +146,9 @@ export default function pLimit(concurrency) {
 			queueItem.run = internalResolve;
 			queue.enqueue(queueItem);
 		}).then(run.bind(undefined, function_, resolve, arguments_)); // eslint-disable-line promise/prefer-await-to-then
+
+		// enqueue transition: a task was added to the pending queue (pending+1).
+		notifyListeners();
 
 		// Start processing immediately if we haven't reached the concurrency limit
 		if (activeCount < concurrency) {
@@ -258,6 +317,13 @@ export default function pLimit(concurrency) {
 				}
 
 				notifyIdle();
+
+				// Only emit when the queue actually shrank: clearing an already-empty
+				// queue leaves the snapshot unchanged (plan §3.4 / E3 → no emission).
+				if (removedCount > 0) {
+					notifyListeners();
+				}
+
 				return removedCount;
 			},
 		},
@@ -286,9 +352,16 @@ export default function pLimit(concurrency) {
 		},
 		pause: {
 			value() {
-				// Idempotent: pausing while already paused is a no-op. Running tasks
-				// are untouched; only the promotion of queued tasks is suspended.
+				// Idempotent: pausing while already paused is a no-op and emits nothing
+				// (plan §3.4). Running tasks are untouched; only the promotion of queued
+				// tasks is suspended.
+				if (paused) {
+					return;
+				}
+
 				paused = true;
+				// pause transition: status becomes 'paused'.
+				notifyListeners();
 			},
 		},
 		resume: {
@@ -299,9 +372,13 @@ export default function pLimit(concurrency) {
 
 				paused = false;
 
+				// resume transition: status leaves 'paused' before any promotion below.
+				notifyListeners();
+
 				// Promote queued tasks up to the current concurrency, mirroring the
 				// concurrency setter's drain. `resumeNext()` still schedules the actual
-				// run() via a microtask, so execution context/timing is unchanged.
+				// run() via a microtask, so execution context/timing is unchanged. Each
+				// promotion emits its own start transition via `resumeNext()`.
 				// eslint-disable-next-line no-unmodified-loop-condition
 				while (activeCount < concurrency && queue.size > 0) {
 					resumeNext();
@@ -323,7 +400,15 @@ export default function pLimit(concurrency) {
 
 			set(newConcurrency) {
 				validateConcurrency(newConcurrency);
+				const changed = newConcurrency !== concurrency;
 				concurrency = newConcurrency;
+
+				// concurrency-change transition, emitted only when the value actually
+				// changed (plan §3.4 / E4). The microtask drain below preserves the
+				// existing timing and emits its own start transitions via resumeNext().
+				if (changed) {
+					notifyListeners();
+				}
 
 				queueMicrotask(() => {
 					// The `!paused` guard both honors a paused limiter (drain stays
@@ -353,6 +438,31 @@ export default function pLimit(concurrency) {
 
 				const promises = Array.from(iterable, (value, index) => generator(function_, value, index));
 				return Promise.all(promises);
+			},
+		},
+		subscribe: {
+			value(listener) {
+				if (typeof listener !== 'function') {
+					throw new TypeError('Expected `listener` to be a function');
+				}
+
+				// Registration order is preserved by the Set insertion order, so
+				// listeners are notified in the order they subscribed.
+				listeners.add(listener);
+
+				let subscribed = true;
+				return () => {
+					// Idempotent unsubscribe: safe to call more than once, and safe for a
+					// listener to unsubscribe itself during notification (notifyListeners
+					// walks a copy and re-checks membership). After this, the listener is
+					// never notified again on any future transition.
+					if (!subscribed) {
+						return;
+					}
+
+					subscribed = false;
+					listeners.delete(listener);
+				};
 			},
 		},
 	});
@@ -408,6 +518,14 @@ export function limitFunction(function_, options) {
 
 			set(newConcurrency) {
 				limit.concurrency = newConcurrency;
+			},
+		},
+		subscribe: {
+			value(listener) {
+				// Delegate to the underlying limiter so the exact same subscription
+				// contract (snapshot shape, emission order, isolation, unsubscribe) is
+				// provided without duplicating any logic.
+				return limit.subscribe(listener);
 			},
 		},
 	});

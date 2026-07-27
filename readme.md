@@ -429,6 +429,45 @@ console.log(limit.isPaused);
 //=> true
 ```
 
+### limit.snapshot()
+
+Read a synchronous, side-effect-free snapshot of the limiter's current state.
+
+Returns a fresh frozen object captured at the moment of the call — useful for reading several coherent values at once (logging, dashboards, debugging) without subscribing. The returned object is a plain frozen value, not a live reference: later state changes are not reflected, so call `snapshot()` again to re-read. Calling it does not affect scheduling, execution order, settlement, or timing.
+
+The snapshot has the following shape:
+
+- `activeCount` (`number`) — promises currently running.
+- `pendingCount` (`number`) — promises waiting to run.
+- `concurrency` (`number`) — the current concurrency limit (may be `Infinity`).
+- `isPaused` (`boolean`) — whether the limiter is paused (`true` after `pause()` and before `resume()`).
+- `status` (`'idle' | 'active' | 'saturated' | 'paused'`) — the derived status (see below).
+
+The `status` is derived from the other fields by a **fixed priority order** — the first matching row wins:
+
+| Priority | `status` | Condition (given no higher row matched) |
+| --- | --- | --- |
+| 1 (highest) | `'paused'` | The limiter is paused (`isPaused` is `true`). |
+| 2 | `'saturated'` | Every slot is occupied (`activeCount >= concurrency`). A limiter with infinite `concurrency` is never saturated. |
+| 3 | `'active'` | At least one task is running but a slot is still free (`activeCount > 0`). |
+| 4 (lowest) | `'idle'` | Nothing is running (`activeCount === 0`). |
+
+`pendingCount` does **not** affect `status`: a limiter with queued-but-not-started tasks and nothing running (and not paused) is still `'idle'`, so do not read `'idle'` as "the queue is empty". This is the same derived `status` reported to [`subscribe()`](#limitsubscribelistener) listeners, so both surfaces always agree for a given moment.
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(1);
+
+console.log(limit.snapshot());
+//=> {activeCount: 0, pendingCount: 0, concurrency: 1, isPaused: false, status: 'idle'}
+
+limit(() => doSomething());
+
+console.log(limit.snapshot());
+//=> {activeCount: 1, pendingCount: 0, concurrency: 1, isPaused: false, status: 'saturated'}
+```
+
 ### limit.subscribe(listener)
 
 Subscribe to limiter state changes.

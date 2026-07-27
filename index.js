@@ -47,29 +47,36 @@ export default function pLimit(concurrency) {
 	// preserving the exact previous timing/settlement semantics (additive integrity).
 	const listeners = new Set();
 
-	// Derive the frozen snapshot shape (frozen contract: activeCount, pendingCount,
-	// concurrency, status). `status` follows the fixed priority order:
-	// paused > saturated > active > idle. An infinite concurrency is never saturated
-	// because `activeCount` is always finite, so `activeCount >= Infinity` is false.
-	const snapshot = () => {
-		let status;
+	// Derive the human-facing status by the fixed priority order
+	// paused > saturated > active > idle. Shared by both observation surfaces —
+	// the `subscribe()` push payload and the public `snapshot()` method — so they
+	// always report the same status for a given moment (surface consistency). An
+	// infinite concurrency is never saturated because `activeCount` is always
+	// finite, so `activeCount >= Infinity` is false.
+	const deriveStatus = () => {
 		if (paused) {
-			status = 'paused';
-		} else if (activeCount >= concurrency) {
-			status = 'saturated';
-		} else if (activeCount > 0) {
-			status = 'active';
-		} else {
-			status = 'idle';
+			return 'paused';
 		}
 
-		return Object.freeze({
-			activeCount,
-			pendingCount: queue.size,
-			concurrency,
-			status,
-		});
+		if (activeCount >= concurrency) {
+			return 'saturated';
+		}
+
+		if (activeCount > 0) {
+			return 'active';
+		}
+
+		return 'idle';
 	};
+
+	// Derive the frozen `subscribe()` payload shape (frozen contract: activeCount,
+	// pendingCount, concurrency, status).
+	const snapshot = () => Object.freeze({
+		activeCount,
+		pendingCount: queue.size,
+		concurrency,
+		status: deriveStatus(),
+	});
 
 	// Notify every listener with one shared frozen snapshot for this transition.
 	// Iterates a copy so a listener may (un)subscribe during notification without
@@ -733,16 +740,18 @@ export default function pLimit(concurrency) {
 			value() {
 				// Read-only, side-effect-free O(1) point-in-time snapshot (plan §2).
 				// Returns a fresh frozen plain object each call — not a live reference,
-				// so later state changes are not reflected (re-call to re-read). Exactly
-				// four fields: activeCount/pendingCount/concurrency/isPaused. Purely
-				// additive: touches no scheduling/timing/settlement state, and is a
-				// separate entry point from `subscribe` (whose payload exposes `status`,
-				// left unchanged).
+				// so later state changes are not reflected (re-call to re-read). Five
+				// fields: activeCount/pendingCount/concurrency/isPaused plus the derived
+				// `status` (shared with the `subscribe()` payload via `deriveStatus()`,
+				// so both surfaces always agree). Purely additive: `status` was added
+				// without touching the existing fields or any scheduling/timing/
+				// settlement state.
 				return Object.freeze({
 					activeCount,
 					pendingCount: queue.size,
 					concurrency,
 					isPaused: paused,
+					status: deriveStatus(),
 				});
 			},
 		},

@@ -62,6 +62,13 @@ export type LimiterStateSnapshot = {
 	Whether the limiter was paused at the moment of the snapshot — `true` after `pause()` and before `resume()`.
 	*/
 	readonly isPaused: boolean;
+
+	/**
+	The derived status of the limiter at the moment of the snapshot, chosen by the fixed priority order `paused` > `saturated` > `active` > `idle`. See {@link LimiterStatus}.
+
+	This matches the `status` in the {@link LimiterSnapshot} payload delivered to `subscribe()` listeners for the same moment.
+	*/
+	readonly status: LimiterStatus;
 };
 
 export type LimitFunction = {
@@ -83,13 +90,13 @@ export type LimitFunction = {
 	/**
 	Read a synchronous, side-effect-free snapshot of the limiter's current state.
 
-	Returns a fresh frozen {@link LimiterStateSnapshot} — `{activeCount, pendingCount, concurrency, isPaused}` — captured at the moment of the call. Useful for reading several coherent values at once (logging, dashboards, debugging) without subscribing.
+	Returns a fresh frozen {@link LimiterStateSnapshot} — `{activeCount, pendingCount, concurrency, isPaused, status}` — captured at the moment of the call. Useful for reading several coherent values at once (logging, dashboards, debugging) without subscribing.
 
 	The returned object is a plain frozen value, not a live reference: later state changes are not reflected, so call `snapshot()` again to re-read. Calling it does not affect scheduling, execution order, settlement, or timing.
 
-	This is additive and independent of {@link LimitFunction.subscribe}, whose {@link LimiterSnapshot} payload (with a derived `status`) is unchanged.
+	The derived `status` uses the fixed priority order `paused` > `saturated` > `active` > `idle` and matches the `status` reported to {@link LimitFunction.subscribe} listeners for the same moment.
 
-	@returns A frozen snapshot of `activeCount`, `pendingCount`, `concurrency`, and `isPaused`.
+	@returns A frozen snapshot of `activeCount`, `pendingCount`, `concurrency`, `isPaused`, and `status`.
 	*/
 	snapshot: () => Readonly<LimiterStateSnapshot>;
 

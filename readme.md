@@ -347,6 +347,39 @@ limitedFunction.clearQueue();
 await Promise.allSettled(promises);
 ```
 
+## Real-time Inspector demo
+
+The `demo/` directory contains a real-time **Inspector** that observes a running
+limiter — its active/pending counts, concurrency, and derived status — and lets
+you drive state transitions (enqueue / clear queue / pause / resume).
+
+The Inspector renders four derived states. Each state is shown with **color and
+an explicit on-screen text label** (never color alone), so it stays legible for
+color-blind users and screen readers:
+
+| status | On-screen label | Meaning |
+| --- | --- | --- |
+| `idle` | **Idle** | No task running and none waiting. |
+| `active` | **Running** | At least one task running, a free slot remains. |
+| `saturated` | **Saturated** | Running tasks reached the concurrency limit (no free slot). Infinite concurrency is never saturated. |
+| `paused` | **Paused** | Paused via `pause()`; running tasks still settle, no queued task starts. |
+
+Accessibility and responsive contract:
+
+- The status badge is an `aria-live="polite"` region, so status text changes are
+  announced to screen readers.
+- Every control (enqueue / clear queue / pause / resume) has an explicit
+  `aria-label` and is reachable in keyboard Tab order.
+- After cancelling (`clearQueue()`), pausing, or a failure, the display returns
+  to its initial values (`Idle` + zero counts) and the primary control stays
+  usable — the UI converges once the limiter becomes idle.
+- Below 480px, the controls stack vertically; no content overflows at ≥ 320px.
+
+The full visual specification — concrete colors, typography, layout, and the
+state-transition flows — lives in
+[`docs/design/inspector-contract.md`](docs/design/inspector-contract.md), with a
+visual mockup at `docs/design/mockups/inspector-F68F701A7A-76.html`.
+
 ## Recipes
 
 See [recipes.md](recipes.md) for common use cases and patterns.

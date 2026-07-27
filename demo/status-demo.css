@@ -1,0 +1,137 @@
+/*
+상태 스냅샷 진단 데모 스타일 (F68F701A7A-118, additive)
+
+planner 동결 UI 계약(ui-contract@v1)의 selector·design token만 그대로 소비한다.
+- design token 값은 §3.5 frozen: 재정의하지 않고 exact value로 선언한다.
+- 상태는 색상만으로 구분하지 않으며(§3.6), 색상은 텍스트 라벨을 보조한다.
+- 반응형(§3.7): ≥320px 세로 스택, ≥640px 다열 grid.
+기존 데모(inspector/queue-pressure) 스타일을 덮어쓰지 않는 신규 selector만 추가한다.
+*/
+
+#snapshot-panel {
+	/* §3.5 design token (frozen 값 — 재정의 금지) */
+	--color-status-running: #16a34a;
+	--color-status-paused: #d97706;
+	--color-status-idle: #64748b;
+	--space-card-gap: 12px;
+	--radius-card: 8px;
+
+	margin-top: 24px;
+	padding: 16px;
+	border: 1px solid var(--color-status-idle);
+	border-radius: var(--radius-card);
+}
+
+.status-panel__intro {
+	margin: 0 0 16px;
+	line-height: 1.5;
+	color: #334155;
+}
+
+/* 상태 카드 컨테이너: ≥320px 세로 스택(1열) → ≥640px 다열 grid */
+.status-panel__cards {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: var(--space-card-gap);
+}
+
+@media (min-width: 640px) {
+	.status-panel__cards {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+/* §3.3 개별 상태 카드 — 기본(idle) 색상 */
+.status-card {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 12px;
+	border: 2px solid var(--color-status-idle);
+	border-radius: var(--radius-card);
+	/* content overflow 방지 (§3.7) */
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.status-card__label {
+	font-size: 0.85rem;
+	color: var(--color-status-idle);
+}
+
+.status-card__value {
+	font-size: 1.5rem;
+	font-weight: 700;
+	color: #0f172a;
+}
+
+/* 색상은 텍스트 라벨을 보조한다(§3.6 — 색상 단독 구분 금지) */
+.status-card--running {
+	border-color: var(--color-status-running);
+}
+
+.status-card--running .status-card__label,
+.status-card--running .status-card__value {
+	color: var(--color-status-running);
+}
+
+.status-card--paused {
+	border-color: var(--color-status-paused);
+}
+
+.status-card--paused .status-card__label,
+.status-card--paused .status-card__value {
+	color: var(--color-status-paused);
+}
+
+/* 상태 전이 알림 region (색상 외 텍스트로도 상태 노출) */
+.status-panel__live {
+	margin: var(--space-card-gap) 0;
+	padding: 8px 12px;
+	border-radius: var(--radius-card);
+	background: #f1f5f9;
+	color: #0f172a;
+	font-weight: 600;
+}
+
+.status-panel__live[data-state='running'],
+.status-panel__live[data-state='resumed'] {
+	color: var(--color-status-running);
+}
+
+.status-panel__live[data-state='paused'] {
+	color: var(--color-status-paused);
+}
+
+/* §3.3 control 그룹/버튼 */
+.demo-controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-card-gap);
+}
+
+.demo-controls__button {
+	padding: 8px 16px;
+	border: 1px solid var(--color-status-idle);
+	border-radius: var(--radius-card);
+	background: #ffffff;
+	color: #0f172a;
+	font-size: 1rem;
+	cursor: pointer;
+}
+
+.demo-controls__button:hover {
+	background: #f8fafc;
+}
+
+/* 키보드 조작 가시성(§3.6 Tab/Enter/Space) */
+.demo-controls__button:focus-visible {
+	outline: 2px solid var(--color-status-running);
+	outline-offset: 2px;
+}
+
+/* 주 실행 control 비활성 상태 — 후조건 복귀 시 재활성화(§3.4) */
+.demo-controls__button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}

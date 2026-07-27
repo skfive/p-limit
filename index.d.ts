@@ -35,6 +35,35 @@ export type LimiterSnapshot = {
 	readonly status: LimiterStatus;
 };
 
+/**
+An immutable, read-only snapshot of a limiter's core state at a single moment, returned by `snapshot()`.
+
+Unlike {@link LimiterSnapshot} (the push payload delivered to `subscribe()` listeners, which carries a derived `status`), this is a synchronous point-in-time read that exposes `isPaused` directly. Each call returns a fresh frozen object — not a live reference — so read it again to observe later changes.
+
+The object is frozen; callers must not mutate it.
+*/
+export type LimiterStateSnapshot = {
+	/**
+	The number of promises that were running at the moment of the snapshot.
+	*/
+	readonly activeCount: number;
+
+	/**
+	The number of promises that were waiting to run at the moment of the snapshot.
+	*/
+	readonly pendingCount: number;
+
+	/**
+	The concurrency limit at the moment of the snapshot (may be `Infinity`).
+	*/
+	readonly concurrency: number;
+
+	/**
+	Whether the limiter was paused at the moment of the snapshot — `true` after `pause()` and before `resume()`.
+	*/
+	readonly isPaused: boolean;
+};
+
 export type LimitFunction = {
 	/**
 	The number of promises that are currently running.
@@ -50,6 +79,19 @@ export type LimitFunction = {
 	Get or set the concurrency limit.
 	*/
 	concurrency: number;
+
+	/**
+	Read a synchronous, side-effect-free snapshot of the limiter's current state.
+
+	Returns a fresh frozen {@link LimiterStateSnapshot} — `{activeCount, pendingCount, concurrency, isPaused}` — captured at the moment of the call. Useful for reading several coherent values at once (logging, dashboards, debugging) without subscribing.
+
+	The returned object is a plain frozen value, not a live reference: later state changes are not reflected, so call `snapshot()` again to re-read. Calling it does not affect scheduling, execution order, settlement, or timing.
+
+	This is additive and independent of {@link LimitFunction.subscribe}, whose {@link LimiterSnapshot} payload (with a derived `status`) is unchanged.
+
+	@returns A frozen snapshot of `activeCount`, `pendingCount`, `concurrency`, and `isPaused`.
+	*/
+	snapshot: () => Readonly<LimiterStateSnapshot>;
 
 	/**
 	Switch the limiter's concurrency to a registered preset.
@@ -345,6 +387,17 @@ export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
 	Get or set the concurrency limit.
 	*/
 	concurrency: number;
+
+	/**
+	Read a synchronous, side-effect-free snapshot of the limiter's current state.
+
+	Returns a fresh frozen {@link LimiterStateSnapshot} — `{activeCount, pendingCount, concurrency, isPaused}` — captured at the moment of the call. Delegates to the underlying limiter, so it mirrors that limiter's `snapshot()` shape and values exactly.
+
+	The returned object is a plain frozen value, not a live reference: later state changes are not reflected, so call `snapshot()` again to re-read. Calling it does not affect scheduling, execution order, settlement, or timing.
+
+	@returns A frozen snapshot of `activeCount`, `pendingCount`, `concurrency`, and `isPaused`.
+	*/
+	snapshot: () => Readonly<LimiterStateSnapshot>;
 
 	/**
 	Switch the limiter's concurrency to a registered preset.

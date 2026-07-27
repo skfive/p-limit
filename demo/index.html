@@ -7,6 +7,8 @@
 	<link rel="stylesheet" href="inspector.css">
 	<!-- 대기열 압력 히스토리 패널 스타일 (F68F701A7A-83, additive) -->
 	<link rel="stylesheet" href="demo.css">
+	<!-- 상태 스냅샷 진단 데모 스타일 (F68F701A7A-118, additive) -->
+	<link rel="stylesheet" href="status-demo.css">
 	<!-- 라이브러리 코어(index.js)가 소비하는 bare specifier를 브라우저에서 해석하기 위한 import map. -->
 	<script type="importmap">
 	{
@@ -77,10 +79,54 @@
 			<!-- #queue-pressure-history-list: 히스토리 항목 목록 (§3.1, §6 aria-live="polite") -->
 			<ul id="queue-pressure-history-list" class="queue-pressure__list" aria-live="polite" aria-label="대기열 압력 히스토리 목록"></ul>
 		</section>
+
+		<!-- 상태 스냅샷 진단 데모 패널 (F68F701A7A-118, additive) -->
+		<!-- #snapshot-panel: 스냅샷 표시 패널 컨테이너 (ui-contract §3.2) -->
+		<section id="snapshot-panel" class="status-panel" aria-labelledby="snapshot-title">
+			<h2 id="snapshot-title">상태 스냅샷 진단 데모</h2>
+			<p class="status-panel__intro">
+				작업을 추가·일시정지·재개·비우기하며 <code>limit.snapshot()</code> 읽기 전용 스냅샷으로
+				active/pending/concurrency/일시정지 상태를 관찰합니다. 상태는 색상뿐 아니라
+				<strong>텍스트 라벨</strong>로 표시되고, 변화는 <code>aria-live</code>로 알립니다.
+			</p>
+
+			<!-- 상태 카드 그리드 (§3.3 .status-panel / .status-card) -->
+			<div class="status-panel__cards">
+				<div class="status-card">
+					<span class="status-card__label">실행 중 (active)</span>
+					<span id="snapshot-active-count" class="status-card__value" aria-label="실행 중 태스크 수">0</span>
+				</div>
+				<div class="status-card">
+					<span class="status-card__label">대기 중 (pending)</span>
+					<span id="snapshot-pending-count" class="status-card__value" aria-label="대기 중 태스크 수">0</span>
+				</div>
+				<div class="status-card">
+					<span class="status-card__label">동시성 (concurrency)</span>
+					<span id="snapshot-concurrency" class="status-card__value" aria-label="현재 동시성 한도">2</span>
+				</div>
+				<div class="status-card" id="snapshot-pause-card">
+					<span class="status-card__label">일시정지 상태</span>
+					<span id="snapshot-pause-state" class="status-card__value" aria-label="일시정지 상태">실행 가능</span>
+				</div>
+			</div>
+
+			<!-- 상태 전이 알림 region (§3.6 aria-live="polite", 색상 외 텍스트 라벨) -->
+			<p id="snapshot-live" class="status-panel__live" role="status" aria-live="polite" data-state="idle">유휴 — 대기 없는 상태입니다</p>
+
+			<!-- 실행 control 그룹 (§3.2 control id, §3.6 명시적 aria-label + Tab/Enter/Space) -->
+			<div class="demo-controls" role="group" aria-label="상태 스냅샷 데모 제어">
+				<button type="button" id="demo-add-task" class="demo-controls__button" aria-label="작업 추가">작업 추가</button>
+				<button type="button" id="demo-pause" class="demo-controls__button" aria-label="일시정지">일시정지</button>
+				<button type="button" id="demo-resume" class="demo-controls__button" aria-label="재개">재개</button>
+				<button type="button" id="demo-clear" class="demo-controls__button" aria-label="대기열 비우기">대기열 비우기</button>
+			</div>
+		</section>
 	</main>
 
 	<script type="module" src="inspector.js"></script>
 	<!-- 대기열 압력 히스토리 패널 런타임 (F68F701A7A-83, additive) -->
 	<script type="module" src="demo.js"></script>
+	<!-- 상태 스냅샷 진단 데모 런타임 (F68F701A7A-118, additive) -->
+	<script type="module" src="status-demo.js"></script>
 </body>
 </html>

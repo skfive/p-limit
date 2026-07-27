@@ -52,6 +52,17 @@ export type LimitFunction = {
 	concurrency: number;
 
 	/**
+	Switch the limiter's concurrency to a registered preset.
+
+	Looks up `name` in the module-global preset registry (see {@link definePreset}) and assigns its value through the same path as `concurrency = value`, so pending tasks are promoted up to the new limit exactly like a numeric change.
+
+	Throws an {@link UnknownPresetError} when `name` is not registered. The lookup happens before the assignment, so a failed switch leaves the current `concurrency` unchanged.
+
+	@param name - A registered preset name.
+	*/
+	usePreset: (name: string) => void;
+
+	/**
 	Discard pending promises that are waiting to run.
 
 	This might be useful if you want to tear down the queue at the end of your program's lifecycle or discard any function calls referencing an intermediary state of your app.
@@ -214,7 +225,7 @@ export type LimitFunction = {
 /**
 Run multiple promise-returning & async functions with limited concurrency.
 
-@param concurrency - Concurrency limit. Minimum: `1`. You can pass a number or an options object with a `concurrency` property.
+@param concurrency - Concurrency limit. Minimum: `1`. You can pass a number, a registered preset name (see {@link definePreset}), or an options object with a `concurrency` property.
 @returns A `limit` function.
 
 @example
@@ -241,15 +252,49 @@ import pLimit from 'p-limit';
 const limit = pLimit({concurrency: 1});
 ```
 */
-export default function pLimit(concurrency: number | Options): LimitFunction;
+export default function pLimit(concurrency: number | string | Options): LimitFunction;
+
+/**
+Register a named concurrency preset in the module-global registry.
+
+Maps `name` to a concurrency value so limiters can be created (`pLimit(name)`, `pLimit({concurrency: name})`) or switched (`limit.usePreset(name)`) by that name. Registering an existing name overwrites it; already-created limiters keep the concurrency they captured at creation time.
+
+The registry starts empty — there are no built-in presets.
+
+@param name - A non-empty preset name.
+@param concurrency - Concurrency value. Minimum: `1` (positive integer or `Infinity`), the same rule as `pLimit`.
+@throws TypeError - When `name` is not a non-empty string, or `concurrency` is not a positive integer / `Infinity`. A rejected registration leaves any existing value for `name` unchanged.
+
+@example
+```
+import pLimit, {definePreset} from 'p-limit';
+
+definePreset('fast', 8);
+const limit = pLimit('fast'); // concurrency === 8
+```
+*/
+export function definePreset(name: string, concurrency: number): void;
+
+/**
+Thrown when a preset name is looked up (`pLimit(name)`, `pLimit({concurrency: name})`, or `limit.usePreset(name)`) but no preset with that name has been registered.
+*/
+export class UnknownPresetError extends Error {
+	constructor(presetName: string);
+	readonly name: 'UnknownPresetError';
+
+	/**
+	The preset name that failed to resolve.
+	*/
+	readonly presetName: string;
+}
 
 export type Options = {
 	/**
 	Concurrency limit.
 
-	Minimum: `1`.
+	Minimum: `1`. May be a number or a registered preset name (see {@link definePreset}).
 	*/
-	readonly concurrency: number;
+	readonly concurrency: number | string;
 
 	/**
 	Reject pending promises with an `AbortError` when `clearQueue()` is called.
@@ -300,6 +345,17 @@ export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
 	Get or set the concurrency limit.
 	*/
 	concurrency: number;
+
+	/**
+	Switch the limiter's concurrency to a registered preset.
+
+	Looks up `name` in the module-global preset registry (see {@link definePreset}) and assigns its value through the same path as `concurrency = value`, so pending tasks are promoted up to the new limit exactly like a numeric change. Delegates to the underlying limiter.
+
+	Throws an {@link UnknownPresetError} when `name` is not registered. The lookup happens before the assignment, so a failed switch leaves the current `concurrency` unchanged.
+
+	@param name - A registered preset name.
+	*/
+	usePreset: (name: string) => void;
 
 	/**
 	Discard pending promises that are waiting to run.

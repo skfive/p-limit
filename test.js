@@ -5,7 +5,7 @@ import test from 'ava';
 import inRange from 'in-range';
 import timeSpan from 'time-span';
 import randomInt from 'random-int';
-import pLimit, {limitFunction} from './index.js';
+import pLimit, {limitFunction, definePreset, UnknownPresetError} from './index.js';
 
 test('concurrency: 1', async t => {
 	const input = [
@@ -2775,4 +2775,146 @@ test('[FIND22] find raises in-flight async draws when concurrency increases mid-
 	const result = await promise;
 	t.is(result, 7);
 	t.is(inFlightMax, 3);
+});
+
+// --- Named concurrency presets (F68F701A7A-107) ---------------------------
+// The preset registry is module-global, so every test below uses a unique
+// preset name to stay independent of the others (plan §9).
+
+test('definePreset registers a name resolved by pLimit(name)', t => {
+	definePreset('preset-create-basic', 8);
+	const limit = pLimit('preset-create-basic');
+	t.is(limit.concurrency, 8);
+});
+
+test('pLimit({concurrency: name}) resolves a preset and keeps rejectOnClear behavior', async t => {
+	definePreset('preset-create-object', 1);
+	const limit = pLimit({concurrency: 'preset-create-object', rejectOnClear: true});
+	t.is(limit.concurrency, 1);
+
+	const running = limit(() => delay(50));
+	const pending = limit(() => delay(10));
+	await Promise.resolve();
+	t.is(limit.pendingCount, 1);
+
+	// The `rejectOnClear` option must still reject the pending promise with an AbortError.
+	limit.clearQueue();
+	await t.throwsAsync(pending, {name: 'AbortError'});
+	await running;
+});
+
+test('limit.usePreset(name) switches a live limiter to the preset value', t => {
+	definePreset('preset-switch-basic', 5);
+	const limit = pLimit(1);
+	t.is(limit.concurrency, 1);
+
+	limit.usePreset('preset-switch-basic');
+	t.is(limit.concurrency, 5);
+});
+
+test('usePreset raising the limit promotes waiting tasks up to the new value', async t => {
+	definePreset('preset-switch-raise', 4);
+	const limit = pLimit(2);
+	let running = 0;
+	const log = [];
+	const promises = Array.from({length: 10}).map(() =>
+		limit(async () => {
+			++running;
+			log.push(running);
+			await delay(50);
+			--running;
+		}));
+	await delay(0);
+	t.is(running, 2);
+
+	limit.usePreset('preset-switch-raise');
+	await Promise.all(promises);
+	t.deepEqual(log, [1, 2, 3, 4, 4, 4, 4, 4, 4, 4]);
+});
+
+test('definePreset overwrites an existing name for subsequent creations', t => {
+	definePreset('preset-overwrite', 8);
+	t.is(pLimit('preset-overwrite').concurrency, 8);
+
+	definePreset('preset-overwrite', 16);
+	t.is(pLimit('preset-overwrite').concurrency, 16);
+});
+
+test('pLimit(name) with an unregistered name throws UnknownPresetError', t => {
+	const error = t.throws(() => pLimit('preset-missing-create'), {instanceOf: UnknownPresetError});
+	t.is(error.name, 'UnknownPresetError');
+	t.is(error.presetName, 'preset-missing-create');
+	t.is(error.message, 'Unknown preset: `preset-missing-create`');
+	t.true(error instanceof Error);
+});
+
+test('usePreset with an unregistered name throws and preserves the current concurrency', async t => {
+	const limit = pLimit(2);
+
+	const error = t.throws(() => limit.usePreset('preset-missing-switch'), {instanceOf: UnknownPresetError});
+	t.is(error.presetName, 'preset-missing-switch');
+
+	// The concurrency must be untouched and scheduling must still work.
+	t.is(limit.concurrency, 2);
+	const results = await Promise.all([limit(async () => 1), limit(async () => 2), limit(async () => 3)]);
+	t.deepEqual(results, [1, 2, 3]);
+	t.is(limit.concurrency, 2);
+});
+
+test('definePreset rejects invalid concurrency values and preserves the prior registration', t => {
+	definePreset('preset-invalid-value', 4);
+
+	for (const badValue of [0, -1, 1.5, Number.NaN, '4']) {
+		t.throws(() => definePreset('preset-invalid-value', badValue), {
+			instanceOf: TypeError,
+			message: 'Expected `concurrency` to be a number from 1 and up',
+		});
+	}
+
+	// The previously registered value must remain intact.
+	t.is(pLimit('preset-invalid-value').concurrency, 4);
+});
+
+test('definePreset rejects empty or non-string names', t => {
+	for (const badName of ['', 4, null, undefined, {}]) {
+		t.throws(() => definePreset(badName, 4), {
+			instanceOf: TypeError,
+			message: 'Expected `name` to be a non-empty string',
+		});
+	}
+});
+
+test('definePreset accepts Infinity and the limiter is never saturated', t => {
+	definePreset('preset-unbounded', Number.POSITIVE_INFINITY);
+	const limit = pLimit('preset-unbounded');
+	t.is(limit.concurrency, Number.POSITIVE_INFINITY);
+	t.false(limit.isSaturated);
+});
+
+test('limitFunction resolves a preset and delegates usePreset to the underlying limiter', t => {
+	definePreset('preset-limitfn-create', 3);
+	definePreset('preset-limitfn-switch', 6);
+
+	const limitedFunction = limitFunction(async n => n, {concurrency: 'preset-limitfn-create'});
+	t.is(limitedFunction.concurrency, 3);
+
+	limitedFunction.usePreset('preset-limitfn-switch');
+	t.is(limitedFunction.concurrency, 6);
+});
+
+test('numeric pLimit(2) usage stays backward compatible', async t => {
+	const limit = pLimit(2);
+	t.is(limit.concurrency, 2);
+
+	let running = 0;
+	let maxRunning = 0;
+	const promises = Array.from({length: 6}).map(() =>
+		limit(async () => {
+			running++;
+			maxRunning = Math.max(maxRunning, running);
+			await delay(20);
+			running--;
+		}));
+	await Promise.all(promises);
+	t.is(maxRunning, 2);
 });

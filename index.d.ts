@@ -98,6 +98,26 @@ export type LimitFunction = {
 	) => Promise<Array<PromiseSettledResult<ReturnType>>>;
 
 	/**
+	Process an iterable or async iterable of inputs with limited concurrency, keeping only the items whose predicate resolves truthy.
+
+	The predicate function receives the item value and its index, and may be synchronous or asynchronous. An item is kept when the predicate's return value (awaited if a promise) is truthy, matching `Array.prototype.filter`.
+
+	The resolved array contains the original input items (not the predicate's boolean), in input (draw) order regardless of the order in which the predicates complete.
+
+	Like {@link LimitFunction.map} (and unlike {@link LimitFunction.mapSettled}), a predicate rejection is fatal: it rejects the returned promise with that reason and stops drawing new items. For an async iterable, the iterator's `return()` is called once for cleanup, matching `limit.map()`.
+
+	Async iterables are consumed lazily: the next value is only pulled when a concurrency slot frees up, so at most `concurrency` items are drawn but not yet settled at any time. This makes it safe to pass infinite or streaming async iterables. Sync iterables retain the eager behavior.
+
+	@param iterable - An iterable or async iterable containing an argument for the given predicate.
+	@param predicateFunction - Predicate function returning a boolean (or a promise for one).
+	@returns A promise resolving to the kept input items in input (draw) order.
+	*/
+	filter: <Input> (
+		iterable: Iterable<Input> | AsyncIterable<Input>,
+		predicateFunction: (input: Input, index: number) => PromiseLike<boolean> | boolean
+	) => Promise<Input[]>;
+
+	/**
 	Returns a promise that resolves when the limiter becomes idle — no promises are currently running and none are waiting to run.
 
 	If the limiter is already idle when this is called, the returned promise resolves immediately.
@@ -270,6 +290,26 @@ export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
 	@returns The number of pending promises that were removed from the queue. Already-running promises are never counted or affected.
 	*/
 	clearQueue: (reason?: unknown) => number;
+
+	/**
+	Process an iterable or async iterable of inputs with limited concurrency, keeping only the items whose predicate resolves truthy.
+
+	The predicate function receives the item value and its index, and may be synchronous or asynchronous. An item is kept when the predicate's return value (awaited if a promise) is truthy, matching `Array.prototype.filter`.
+
+	The resolved array contains the original input items (not the predicate's boolean), in input (draw) order regardless of the order in which the predicates complete.
+
+	Like `map` (and unlike `mapSettled`), a predicate rejection is fatal: it rejects the returned promise with that reason and stops drawing new items. For an async iterable, the iterator's `return()` is called once for cleanup. Delegates to the underlying limiter.
+
+	Async iterables are consumed lazily: the next value is only pulled when a concurrency slot frees up, so at most `concurrency` items are drawn but not yet settled at any time. Sync iterables retain the eager behavior.
+
+	@param iterable - An iterable or async iterable containing an argument for the given predicate.
+	@param predicateFunction - Predicate function returning a boolean (or a promise for one).
+	@returns A promise resolving to the kept input items in input (draw) order.
+	*/
+	filter: <Input> (
+		iterable: Iterable<Input> | AsyncIterable<Input>,
+		predicateFunction: (input: Input, index: number) => PromiseLike<boolean> | boolean
+	) => Promise<Input[]>;
 
 	/**
 	Returns a promise that resolves when the limiter becomes idle — no promises are currently running and none are waiting to run.

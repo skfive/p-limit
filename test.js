@@ -2054,3 +2054,327 @@ test('limitFunction() delegates pause()/resume()/isPaused to the underlying limi
 	t.is(limitedFunction.activeCount, 0);
 	t.is(limitedFunction.pendingCount, 0);
 });
+
+// --- filter (F68F701A7A-96) ---
+// `limit.filter` mirrors `Array.prototype.filter`: it keeps only the original
+// items whose predicate resolves truthy, in input (draw) order regardless of
+// completion order. Like `limit.map` (and unlike `mapSettled`), a predicate
+// rejection is fatal — it rejects the whole call with that reason and, for async
+// iterables, calls the iterator's `return()` once for cleanup.
+
+test('[F1] filter keeps truthy items in input order (sync iterable)', async t => {
+	const limit = pLimit(2);
+
+	const results = await limit.filter([1, 2, 3, 4], async n => n % 2 === 0);
+
+	t.deepEqual(results, [2, 4]);
+});
+
+test('[F2] filter never runs more predicates than the concurrency limit (sync iterable)', async t => {
+	const limit = pLimit(2);
+	let running = 0;
+	let maxRunning = 0;
+
+	const results = await limit.filter([1, 2, 3, 4, 5, 6], async n => {
+		running++;
+		maxRunning = Math.max(maxRunning, running);
+		await delay(10);
+		running--;
+		return n > 3;
+	});
+
+	t.deepEqual(results, [4, 5, 6]);
+	t.true(maxRunning <= 2);
+});
+
+test('[F3] filter preserves input order even when completion order is shuffled', async t => {
+	const limit = pLimit(3);
+	const inputs = [0, 1, 2, 3, 4, 5];
+
+	// eslint-disable-next-line unicorn/no-array-method-this-argument
+	const results = await limit.filter(inputs, async (value, index) => {
+		// Later indexes finish first, but the output must stay in input order.
+		await delay((inputs.length - index) * 5);
+		return value % 2 === 0;
+	});
+
+	t.deepEqual(results, [0, 2, 4]);
+});
+
+test('[F4] filter uses JavaScript truthiness (0/""/null/undefined/NaN excluded)', async t => {
+	const limit = pLimit(2);
+	const inputs = ['keep-a', 'keep-b', 'drop-c', 'keep-d', 'drop-e'];
+
+	// Return a variety of truthy/falsy verdicts (not just booleans).
+	const verdicts = [1, 'yes', 0, {}, ''];
+
+	// eslint-disable-next-line unicorn/no-array-method-this-argument
+	const results = await limit.filter(inputs, async (value, index) => verdicts[index]);
+
+	t.deepEqual(results, ['keep-a', 'keep-b', 'keep-d']);
+});
+
+test('[F5] filter passes a 0-based draw index to the predicate', async t => {
+	const limit = pLimit(2);
+	const seen = [];
+
+	const results = await limit.filter(['a', 'b', 'c'], async (value, index) => {
+		seen.push([value, index]);
+		return true;
+	});
+
+	t.deepEqual(results, ['a', 'b', 'c']);
+	t.deepEqual(seen.sort((left, right) => left[1] - right[1]), [['a', 0], ['b', 1], ['c', 2]]);
+});
+
+test('[F6] filter resolves to [] for an empty iterable and never calls the predicate', async t => {
+	const limit = pLimit(2);
+	let called = 0;
+
+	const results = await limit.filter([], async () => {
+		called++;
+		return true;
+	});
+
+	t.deepEqual(results, []);
+	t.is(called, 0);
+});
+
+test('[F7] filter resolves to [] when every item is excluded', async t => {
+	const limit = pLimit(2);
+
+	const results = await limit.filter([1, 2, 3], async () => false);
+
+	t.deepEqual(results, []);
+});
+
+test('[F8] filter returns the original items in order when every item passes', async t => {
+	const limit = pLimit(2);
+
+	const results = await limit.filter([3, 1, 2], async () => true);
+
+	t.deepEqual(results, [3, 1, 2]);
+});
+
+test('[F9] filter accepts a sync iterable (set) and a sync predicate', async t => {
+	const limit = pLimit(2);
+
+	const results = await limit.filter(new Set([1, 2, 3, 4]), n => n > 2);
+
+	t.deepEqual(results, [3, 4]);
+});
+
+test('[F10] filter keeps input order for an async iterable despite shuffled completion', async t => {
+	const limit = pLimit(2);
+
+	async function * source() {
+		for (const value of [1, 2, 3, 4]) {
+			yield value;
+		}
+	}
+
+	const results = await limit.filter(source(), async (value, index) => {
+		await delay((5 - index) * 10);
+		return value % 2 === 1;
+	});
+
+	t.deepEqual(results, [1, 3]);
+});
+
+test('[F11] filter lazily consumes an async iterable (in-flight <= concurrency)', async t => {
+	const limit = pLimit(2);
+	let drawn = 0;
+	let inFlight = 0;
+	let inFlightMax = 0;
+
+	async function * source() {
+		for (const value of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+			drawn++;
+			inFlight++;
+			inFlightMax = Math.max(inFlightMax, inFlight);
+			yield value;
+		}
+	}
+
+	const results = await limit.filter(source(), async value => {
+		await delay(15);
+		inFlight--;
+		return value % 2 === 0;
+	});
+
+	t.deepEqual(results, [0, 2, 4, 6, 8]);
+	t.true(inFlightMax <= 2);
+	t.is(drawn, 10);
+});
+
+test('[F12] filter rejects when the predicate throws and calls the async iterator return() once', async t => {
+	const limit = pLimit(2);
+	let returnCalls = 0;
+	const error = new Error('predicate boom');
+
+	const iterable = {
+		[Symbol.asyncIterator]() {
+			let value = 0;
+			return {
+				async next() {
+					return value < 5 ? {value: value++, done: false} : {value: undefined, done: true};
+				},
+				async return() {
+					returnCalls++;
+					return {value: undefined, done: true};
+				},
+			};
+		},
+	};
+
+	// eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
+	await t.throwsAsync(limit.filter(iterable, async value => {
+		if (value === 1) {
+			throw error;
+		}
+
+		await delay(50);
+		return true;
+	}), {is: error});
+
+	t.is(returnCalls, 1);
+});
+
+test('[F13] filter rejects when a sync-iterable predicate rejects (fail-fast, unlike mapSettled)', async t => {
+	const limit = pLimit(2);
+	const error = new Error('sync predicate boom');
+
+	await t.throwsAsync(limit.filter([1, 2, 3], async n => {
+		if (n === 2) {
+			throw error;
+		}
+
+		return true;
+	}), {is: error});
+});
+
+test('[F14] filter rejects when the async iterator itself rejects and cleans up once', async t => {
+	const limit = pLimit(2);
+	let returnCalls = 0;
+	const error = new Error('iterator boom');
+
+	const iterable = {
+		[Symbol.asyncIterator]() {
+			let value = 0;
+			return {
+				async next() {
+					if (value === 2) {
+						throw error;
+					}
+
+					return {value: value++, done: false};
+				},
+				async return() {
+					returnCalls++;
+					return {value: undefined, done: true};
+				},
+			};
+		},
+	};
+
+	// eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
+	await t.throwsAsync(limit.filter(iterable, async () => {
+		await delay(10);
+		return true;
+	}), {is: error});
+
+	t.is(returnCalls, 1);
+});
+
+test('[F15] filter raises in-flight async draws when concurrency increases mid-flight', async t => {
+	const limit = pLimit(1);
+	let inFlight = 0;
+	let inFlightMax = 0;
+
+	async function * source() {
+		for (const value of [0, 1, 2, 3, 4, 5, 6, 7]) {
+			yield value;
+		}
+	}
+
+	const promise = limit.filter(source(), async value => {
+		inFlight++;
+		inFlightMax = Math.max(inFlightMax, inFlight);
+		await delay(30);
+		inFlight--;
+		return value % 2 === 0;
+	});
+
+	await delay(10);
+	t.is(inFlight, 1);
+
+	limit.concurrency = 3;
+
+	const results = await promise;
+	t.deepEqual(results, [0, 2, 4, 6]);
+	t.is(inFlightMax, 3);
+});
+
+test('[F16] filter holds off new async draws while paused and completes after resume', async t => {
+	const limit = pLimit(1);
+	let drawn = 0;
+
+	async function * source() {
+		for (const value of [0, 1, 2, 3]) {
+			drawn++;
+			yield value;
+		}
+	}
+
+	const filtered = limit.filter(source(), async value => {
+		await delay(15);
+		return value % 2 === 0;
+	});
+
+	// Let the first draw start, then pause before the rest are drawn.
+	await delay(5);
+	limit.pause();
+	const drawnAtPause = drawn;
+
+	await delay(40);
+	// No new draws happened while paused.
+	t.is(drawn, drawnAtPause);
+
+	limit.resume();
+	const results = await filtered;
+
+	t.deepEqual(results, [0, 2]);
+	t.is(drawn, 4);
+});
+
+test('[F17] filter keeps the limiter non-idle until it settles, then onIdle resolves', async t => {
+	const limit = pLimit(1);
+
+	async function * source() {
+		yield * [0, 1, 2, 3];
+	}
+
+	const filtered = limit.filter(source(), async value => {
+		await delay(15);
+		return value % 2 === 0;
+	});
+
+	t.false(limit.isIdle);
+
+	const idle = limit.onIdle();
+	// While the lazy filter is still drawing, the limiter must stay non-idle.
+	t.true(await isStillPending(idle, 40));
+
+	await filtered;
+	await idle;
+	t.true(limit.isIdle);
+	t.is(limit.activeCount, 0);
+});
+
+test('[F18] limitFunction() exposes filter delegating to the underlying limiter', async t => {
+	const limitedFunction = limitFunction(async n => n, {concurrency: 2});
+
+	const results = await limitedFunction.filter([1, 2, 3, 4, 5], async n => n % 2 === 1);
+
+	t.deepEqual(results, [1, 3, 5]);
+});

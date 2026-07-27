@@ -25,6 +25,18 @@ export function createTask(id) {
 }
 
 /**
+ * task 상태(data-state)별 한글 라벨. 색상 단독이 아닌 텍스트로도 상태를 전달해
+ * 색각 이상 사용자도 구분 가능하게 한다(ui-contract §2.2·§6.4 접근성).
+ * @type {{queued:string, active:string, done:string, error:string}}
+ */
+export const STATE_LABELS = {
+	queued: '대기',
+	active: '실행',
+	done: '완료',
+	error: '에러',
+};
+
+/**
  * 상태 전이를 적용한 새 tasks 배열을 반환한다 (불변 갱신).
  * 전이 규칙: queued → active → (done | error)
  *  - active  진입 시 startedAt 기록
@@ -94,12 +106,13 @@ function initVisualizer(document_) {
 
 	const sliderEl = document_.querySelector('#concurrency-slider');
 	const concurrencyValueEl = document_.querySelector('#concurrency-value');
+	const concurrencyCountEl = document_.querySelector('#concurrency-count');
 	const activeCountEl = document_.querySelector('#active-count');
 	const pendingCountEl = document_.querySelector('#pending-count');
 	const gridEl = document_.querySelector('#task-grid');
-	const taskCountEl = document_.querySelector('#task-count');
-	const runButtonEl = document_.querySelector('#run-button');
-	const resetButtonEl = document_.querySelector('#reset-button');
+	const taskCountEl = document_.querySelector('#task-count-input');
+	const startButtonEl = document_.querySelector('#start-btn');
+	const resetButtonEl = document_.querySelector('#reset-btn');
 
 	let limit = pLimit(DEFAULT_CONCURRENCY);
 	let tasks = [];
@@ -111,18 +124,42 @@ function initVisualizer(document_) {
 		const aggregate = readAggregate(limit);
 		activeCountEl.textContent = String(aggregate.activeCount);
 		pendingCountEl.textContent = String(aggregate.pendingCount);
+		// concurrency 는 슬라이더 옆 readout(#concurrency-value)과 카운터
+		// (#concurrency-count) 두 곳에 표시하되 값 출처는 limit.concurrency 단일 소스.
 		concurrencyValueEl.textContent = String(aggregate.concurrency);
+		if (concurrencyCountEl) {
+			concurrencyCountEl.textContent = String(aggregate.concurrency);
+		}
+	}
+
+	/**
+	 * task 칩 1개(.task)를 생성한다. 색상만이 아니라 상태 라벨 텍스트(.task__state)와
+	 * aria-label 로도 상태를 전달한다(접근성 — ui-contract §5.3·§6.4).
+	 */
+	function createTaskElement(task) {
+		const element = document_.createElement('div');
+		element.className = 'task';
+		element.dataset.id = String(task.id);
+		element.dataset.state = task.state;
+
+		const idEl = document_.createElement('span');
+		idEl.className = 'task__id';
+		idEl.textContent = `#${task.id}`;
+
+		const stateEl = document_.createElement('span');
+		stateEl.className = 'task__state';
+		stateEl.textContent = STATE_LABELS[task.state];
+
+		element.append(idEl, stateEl);
+		element.setAttribute('aria-label', `작업 ${task.id}, ${STATE_LABELS[task.state]}`);
+		return element;
 	}
 
 	function renderGrid() {
 		gridEl.textContent = '';
 		taskElements.clear();
 		for (const task of tasks) {
-			const element = document_.createElement('div');
-			element.className = 'task';
-			element.dataset.id = String(task.id);
-			element.dataset.state = task.state;
-			element.textContent = String(task.id);
+			const element = createTaskElement(task);
 			gridEl.append(element);
 			taskElements.set(task.id, element);
 		}
@@ -132,6 +169,12 @@ function initVisualizer(document_) {
 		const element = taskElements.get(id);
 		if (element) {
 			element.dataset.state = state;
+			const stateEl = element.querySelector('.task__state');
+			if (stateEl) {
+				stateEl.textContent = STATE_LABELS[state];
+			}
+
+			element.setAttribute('aria-label', `작업 ${id}, ${STATE_LABELS[state]}`);
 		}
 	}
 
@@ -158,6 +201,13 @@ function initVisualizer(document_) {
 		});
 	}
 
+	function setRunning(isRunning) {
+		// 실행 중에는 시작 버튼 비활성(중복 실행 방지 — ui-contract §5.4).
+		if (startButtonEl) {
+			startButtonEl.disabled = isRunning;
+		}
+	}
+
 	function run() {
 		const requested = Number(taskCountEl?.value) || DEFAULT_TASK_COUNT;
 		const count = Math.max(1, Math.min(MAX_TASK_COUNT, requested));
@@ -167,11 +217,13 @@ function initVisualizer(document_) {
 		tasks = Array.from({length: count}, (_, index) => createTask(index + 1));
 		renderGrid();
 		renderCounters();
+		setRunning(true);
 
-		for (const task of tasks) {
-			// error 는 표시만 하고 큐 처리는 계속(전체 중단 없음 — plan §7).
-			limit(() => trackedWork(task)).catch(() => {});
-		}
+		// error 는 표시만 하고 큐 처리는 계속(전체 중단 없음 — plan §7).
+		const runs = tasks.map((task) => limit(() => trackedWork(task)).catch(() => {}));
+		Promise.allSettled(runs).then(() => {
+			setRunning(false);
+		});
 	}
 
 	function reset() {
@@ -179,6 +231,7 @@ function initVisualizer(document_) {
 		tasks = [];
 		renderGrid();
 		renderCounters();
+		setRunning(false);
 	}
 
 	// 동시성 슬라이더: 실행 중에도 즉시 반영(재시작 불필요 — plan §5).
@@ -187,11 +240,11 @@ function initVisualizer(document_) {
 		renderCounters();
 	});
 
-	runButtonEl?.addEventListener('click', run);
+	startButtonEl?.addEventListener('click', run);
 	resetButtonEl?.addEventListener('click', reset);
 
 	// 초기 상태 표시 후 데모 자동 시작(AC: 로드 시 슬라이더 + 초기 task 목록 표시).
-	concurrencyValueEl.textContent = String(DEFAULT_CONCURRENCY);
+	renderCounters();
 	run();
 }
 

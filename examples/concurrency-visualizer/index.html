@@ -5,9 +5,9 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>p-limit 동시성 시각화 예제</title>
 	<!--
-		디자인 시안은 designer(F68F701A7A-40) 담당 style.css 가 채운다.
-		아직 배포 전이어도 아래 fallback 인라인 스타일로 상태가 시각적으로
-		구분되며 file:// 단독 실행(외부 자원 0건)에서도 동작한다.
+		시각 스타일은 ui-contract@v1 (docs/design/concurrency-visualizer-contract.md)
+		§6 을 구현한 style.css 에 정의된다. 모든 색상은 :root 토큰(var(--…))으로만
+		참조하며(하드코딩 hex 없음), 외부 자원 0건으로 file:// 직접 열기에서도 동작한다.
 	-->
 	<link rel="stylesheet" href="style.css">
 	<!--
@@ -24,52 +24,49 @@
 		}
 	}
 	</script>
-	<style>
-		:root { color-scheme: light dark; }
-		body { font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; }
-		.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1rem; }
-		.counters { display: flex; gap: 1.5rem; margin-bottom: 1rem; font-variant-numeric: tabular-nums; }
-		.counters strong { font-size: 1.4rem; }
-		#task-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr)); gap: 0.5rem; }
-		.task {
-			aspect-ratio: 1; display: grid; place-items: center;
-			border-radius: 0.4rem; font-size: 0.85rem; color: #fff;
-			background: #9ca3af; transition: background 0.2s ease;
-		}
-		.task[data-state="queued"] { background: #9ca3af; }
-		.task[data-state="active"] { background: #2563eb; }
-		.task[data-state="done"]   { background: #16a34a; }
-		.task[data-state="error"]  { background: #dc2626; }
-	</style>
 </head>
 <body>
-	<h1>p-limit 동시성 시각화</h1>
-	<p>
-		작업 수와 동시성(concurrency)을 선택하고 실행하면, 각 작업이
-		<em>대기(queued) → 실행(active) → 완료(done)/에러(error)</em>로 전이되는 과정과
-		집계 카운터가 실시간으로 갱신됩니다.
-	</p>
+	<main class="app">
+		<h1>p-limit 동시성 시각화</h1>
+		<p class="intro">
+			작업 수와 동시성(concurrency)을 선택하고 실행하면, 각 작업이
+			<em>대기 → 실행 → 완료/에러</em>로 전이되는 과정과
+			집계 카운터가 실시간으로 갱신됩니다.
+		</p>
 
-	<div class="controls">
-		<label>
-			작업 수
-			<input type="number" id="task-count" min="1" max="30" value="20">
-		</label>
-		<label>
-			동시성
-			<input type="range" id="concurrency-slider" min="1" max="10" step="1" value="3">
-			<output id="concurrency-value">3</output>
-		</label>
-		<button type="button" id="run-button">실행</button>
-		<button type="button" id="reset-button">초기화</button>
-	</div>
+		<section class="controls" aria-label="컨트롤">
+			<div class="control">
+				<label class="control__label" for="task-count-input">작업 수</label>
+				<input type="number" id="task-count-input" min="1" max="30" value="12">
+			</div>
+			<div class="control">
+				<label class="control__label" for="concurrency-slider">동시성</label>
+				<div class="control__slider-row">
+					<input type="range" id="concurrency-slider" min="1" max="10" step="1" value="3">
+					<output id="concurrency-value" for="concurrency-slider">3</output>
+				</div>
+			</div>
+			<button type="button" id="start-btn" class="btn btn--primary">실행</button>
+			<button type="button" id="reset-btn" class="btn btn--secondary">초기화</button>
+		</section>
 
-	<div class="counters">
-		<span>실행 중 <strong id="active-count">0</strong></span>
-		<span>대기 중 <strong id="pending-count">0</strong></span>
-	</div>
+		<section class="counters" aria-label="집계 카운터">
+			<div class="counter counter--active">
+				<span class="counter__value" id="active-count">0</span>
+				<span class="counter__label">실행 중</span>
+			</div>
+			<div class="counter counter--pending">
+				<span class="counter__value" id="pending-count">0</span>
+				<span class="counter__label">대기 중</span>
+			</div>
+			<div class="counter counter--concurrency">
+				<span class="counter__value" id="concurrency-count">3</span>
+				<span class="counter__label">동시성</span>
+			</div>
+		</section>
 
-	<div id="task-grid" aria-label="작업 상태 그리드"></div>
+		<div id="task-grid" aria-label="작업 상태 그리드"></div>
+	</main>
 
 	<script type="module" src="app.js"></script>
 </body>

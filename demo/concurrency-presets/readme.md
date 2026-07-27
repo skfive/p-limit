@@ -39,6 +39,6 @@
 |---|---|
 | `index.html` | DOM 구조(계약 §6의 id/class). |
 | `main.js` | p-limit 소비, 결정론적 fixture, 순수 상태 전이 리듀서, DOM 갱신. |
-| `styles.css` | 시각 스타일 · design token 값. **designer 작업(F68F701A7A-46)의 산출물이며 이 PR에는 포함되지 않습니다.** `index.html`이 `<link>`로 참조하지만, 파일이 없어도 페이지·리듀서 로직은 스타일 없이 정상 동작합니다(계약 §4·§7). |
+| `styles.css` | 시각 스타일 · design token 값(계약 §7의 `--color-status-*` / `--space-panel-gap` 4종 정의 + 상태 class 연결, §8.2 반응형). `index.html`이 `<link>`로 참조하며, 이 파일이 없어도 페이지·리듀서 로직 자체는 동작하지만 frozen design token이 적용되지 않으므로 본 PR에 포함합니다. |
 
 상태 전이 리듀서(`applyTransition` / `computePanelState` 등)는 `main.js`에서 순수 함수로 export 되어 DOM 없이 단위 테스트할 수 있습니다(`test/demo-concurrency-presets.test.js`, plan §11).

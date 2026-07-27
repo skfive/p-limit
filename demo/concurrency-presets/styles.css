@@ -1,0 +1,153 @@
+/*
+ * 동시성 프리셋 비교 데모 — 시각 스타일 · design token (F68F701A7A-47)
+ *
+ * planner frozen UI 계약(docs/plans/concurrency-presets-plan.md §7·§8) 준수.
+ * - §7 design token 이름 4종을 그대로 정의: --color-status-waiting/running/complete,
+ *   --space-panel-gap. 상태 modifier class가 이 토큰을 참조한다(값 재정의 아님, 연결).
+ * - 색상 팔레트는 기존 시각화 mockup(docs/design/mockups/concurrency-visualizer-*.html)의
+ *   상태 색과 정합: waiting=중립 회색, running=파랑, complete=초록.
+ * - §8.2 반응형: ≥320px 세로 스택, ≥720px 3패널 가로 정렬.
+ */
+
+:root {
+	/* §7 frozen design token — 이름 고정, 상태 class가 참조한다. */
+	--color-status-waiting: #9ca3af; /* 대기 — 중립 회색 */
+	--color-status-running: #2563eb; /* 실행 — 파랑 */
+	--color-status-complete: #16a34a; /* 완료 — 초록 */
+	--space-panel-gap: 16px; /* 프리셋 패널 사이 간격 */
+
+	/* 데모 전용 보조 색(계약 외 — 상태 토큰과 무관한 표면/텍스트). */
+	--color-bg: #f9fafb;
+	--color-surface: #ffffff;
+	--color-border: #e5e7eb;
+	--color-text: #111827;
+	--color-text-muted: #6b7280;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	padding: 24px;
+	font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+	background: var(--color-bg);
+	color: var(--color-text);
+	line-height: 1.5;
+}
+
+.concurrency-presets {
+	max-width: 960px;
+	margin: 0 auto;
+}
+
+.concurrency-presets__header h1 {
+	margin: 0 0 4px;
+	font-size: 1.5rem;
+}
+
+.concurrency-presets__header p {
+	margin: 0 0 16px;
+	color: var(--color-text-muted);
+}
+
+.concurrency-presets__controls {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 24px;
+}
+
+.concurrency-presets__controls button {
+	padding: 8px 16px;
+	font: inherit;
+	border-radius: 6px;
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
+	color: var(--color-text);
+	cursor: pointer;
+}
+
+#preset-run {
+	background: var(--color-status-running);
+	border-color: var(--color-status-running);
+	color: #ffffff;
+}
+
+.concurrency-presets__controls button:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.concurrency-presets__controls button:focus-visible {
+	outline: 2px solid var(--color-status-running);
+	outline-offset: 2px;
+}
+
+/* §8.2 반응형: 기본(≥320px) 세로 스택. */
+.concurrency-presets__panel {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: var(--space-panel-gap);
+}
+
+/* §8.2 반응형: ≥720px 3패널 가로 정렬. */
+@media (min-width: 720px) {
+	.concurrency-presets__panel {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+
+.concurrency-presets__preset {
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	padding: 16px;
+	min-width: 0; /* 320px에서 content overflow 방지 */
+}
+
+.concurrency-presets__preset h2 {
+	margin: 0 0 12px;
+	font-size: 1.125rem;
+}
+
+.concurrency-presets__timeline {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* 개별 항목 base — 상태 modifier가 좌측 표시색/텍스트색을 결정한다. */
+.concurrency-presets__item {
+	padding: 8px 12px;
+	border-radius: 6px;
+	border-left: 4px solid var(--color-status-waiting);
+	background: var(--color-bg);
+	font-variant-numeric: tabular-nums;
+	transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.concurrency-presets__item--waiting {
+	border-left-color: var(--color-status-waiting);
+	color: var(--color-text-muted);
+}
+
+.concurrency-presets__item--running {
+	border-left-color: var(--color-status-running);
+	color: var(--color-status-running);
+	font-weight: 600;
+}
+
+.concurrency-presets__item--complete {
+	border-left-color: var(--color-status-complete);
+	color: var(--color-status-complete);
+}
+
+.concurrency-presets__status {
+	margin-top: 20px;
+	color: var(--color-text-muted);
+	font-size: 0.9375rem;
+}

@@ -202,6 +202,9 @@ function bootstrap() {
 	function reset() {
 		runToken += 1; // 진행 중이던 렌더 콜백을 무효화(§9.5: 다음 실행 기준 재설정).
 		isRunning = false;
+		// 실행 중 초기화 시 in-flight run()의 완료 분기(token===runToken)가 다시
+		// 실행되지 않으므로, 여기서 실행 버튼을 직접 되살려 영구 비활성화를 막는다.
+		runButton.disabled = false;
 		buildTimelines();
 		render();
 	}

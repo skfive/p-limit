@@ -276,6 +276,45 @@ console.log(limit.isPaused);
 //=> true
 ```
 
+### limit.subscribe(listener)
+
+Subscribe to limiter state changes.
+
+The `listener` is called with a frozen snapshot on every state transition — enqueueing a task, promoting a queued task to running, a running task settling, `pause()`/`resume()`, `clearQueue()` (only when the queue actually shrinks), and `concurrency` changes. Listeners are notified in subscription order.
+
+Subscribing does not emit an immediate snapshot; read `activeCount`/`pendingCount`/`concurrency` directly for the initial state. A listener that throws does not affect scheduling or the other listeners.
+
+Returns an idempotent unsubscribe function. After it is called, the listener is never notified again; calling it more than once is safe.
+
+The snapshot is a frozen object with the following shape:
+
+- `activeCount` (`number`) — promises currently running.
+- `pendingCount` (`number`) — promises waiting to run.
+- `concurrency` (`number`) — the current concurrency limit (may be `Infinity`).
+- `status` (`'idle' | 'active' | 'saturated' | 'paused'`) — the derived status, chosen by the fixed priority order `paused` > `saturated` > `active` > `idle`.
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(2);
+
+const unsubscribe = limit.subscribe(snapshot => {
+	console.log(snapshot.status, snapshot.activeCount, snapshot.pendingCount);
+});
+
+limit(() => doSomething());
+//=> 'active' 1 0
+
+// Later, stop receiving updates:
+unsubscribe();
+```
+
+#### listener
+
+Type: `Function`
+
+Called with the latest readonly snapshot on each state transition.
+
 ### limitFunction(fn, options) <sup>named export</sup>
 
 Returns a function with limited concurrency.

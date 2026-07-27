@@ -7,8 +7,8 @@
 
 .inspector {
 	/* §4.5 design token(동결): 상태별 색 + metric/control 간격 */
-	--inspector-color-idle: #6b7280;
-	--inspector-color-active: #2563eb;
+	--inspector-color-idle: #475569;
+	--inspector-color-active: #15803d;
 	--inspector-color-saturated: #b45309;
 	--inspector-color-paused: #6d28d9;
 	--inspector-space-gap: 0.75rem;

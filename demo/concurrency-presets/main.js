@@ -14,6 +14,25 @@ export const ITEM_STATE = Object.freeze({
 	COMPLETE: 'complete',
 });
 
+/**
+ * 항목 상태별 텍스트 배지 라벨(designer 계약 §5.5). 색상 단독 의존을 피하고
+ * WCAG 1.4.1 을 충족하기 위해 각 항목에 상태 텍스트("대기/실행/완료")를 병기한다.
+ */
+export const STATE_LABEL = Object.freeze({
+	[ITEM_STATE.WAITING]: '대기',
+	[ITEM_STATE.RUNNING]: '실행',
+	[ITEM_STATE.COMPLETE]: '완료',
+});
+
+/**
+ * 항목 상태 → 배지 라벨 텍스트를 돌려주는 순수 함수(§5.5). 미지의 값은 빈 문자열.
+ * @param {string} state `ITEM_STATE` 값
+ * @returns {string}
+ */
+export function stateLabel(state) {
+	return STATE_LABEL[state] ?? '';
+}
+
 /** 패널 전체 상태 값(§5.1). 다른 값 금지. */
 export const PANEL_STATE = Object.freeze({
 	IDLE: 'idle',
@@ -156,6 +175,11 @@ function bootstrap() {
 				const element = container.querySelector(`[data-item-id="${item.id}"]`);
 				if (element) {
 					element.className = `concurrency-presets__item concurrency-presets__item--${item.state}`;
+					// 상태 텍스트 배지도 함께 갱신(§5.5 — 색상 단독 의존 금지).
+					const tag = element.querySelector('.state-tag');
+					if (tag) {
+						tag.textContent = stateLabel(item.state);
+					}
 				}
 			}
 		}
@@ -184,7 +208,20 @@ function bootstrap() {
 					const element = document.createElement('li');
 					element.dataset.itemId = item.id;
 					element.className = `concurrency-presets__item concurrency-presets__item--${item.state}`;
-					element.textContent = `${item.label} (${item.delay}ms)`;
+
+					// 항목 라벨.
+					const label = document.createElement('span');
+					label.className = 'concurrency-presets__label';
+					label.textContent = `${item.label} (${item.delay}ms)`;
+
+					// 상태 텍스트 배지(§5.5 — 색상 단독 의존 금지, WCAG 1.4.1).
+					// aria-live 요약 region 과 중복 낭독을 피하려 aria-hidden 처리(§5.3).
+					const tag = document.createElement('span');
+					tag.className = 'state-tag';
+					tag.setAttribute('aria-hidden', 'true');
+					tag.textContent = stateLabel(item.state);
+
+					element.append(label, tag);
 					return element;
 				}),
 			);

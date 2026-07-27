@@ -135,6 +135,29 @@ const results = await limit.mapSettled([1, 2, 3], async n => {
 // ]
 ```
 
+### limit.filter(iterable, predicateFunction)
+
+Process an iterable or async iterable of inputs with limited concurrency, keeping only the items whose predicate resolves truthy.
+
+The predicate function receives the item value and its index, and may be synchronous or asynchronous. An item is kept when the predicate's return value (awaited if it is a promise) is truthy, matching [`Array.prototype.filter()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter).
+
+Returns a promise that resolves to the original input items (not the predicate's boolean), in input (draw) order, regardless of the order in which the predicates complete.
+
+Like [`limit.map()`](#limitmapiterable-mapperfunction) (and unlike [`limit.mapSettled()`](#limitmapsettlediterable-mapperfunction)), a predicate rejection is fatal: it rejects the returned promise with that reason and stops drawing new items. For an async iterable, the iterator's `return()` is called once for cleanup, matching `limit.map()`.
+
+Async iterables are consumed lazily: the next value is only pulled once a concurrency slot frees up, so at most `concurrency` items are drawn but not yet settled at any time. This makes it safe to pass infinite or streaming async iterables without pre-loading them into memory. Sync iterables keep the existing eager behavior.
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(2);
+
+// Keep only the URLs that respond OK; at most two HEAD requests run at a time.
+const reachable = await limit.filter(urls, async url => (await fetch(url, {method: 'HEAD'})).ok);
+```
+
+This is a convenience function for processing inputs that arrive in batches. For more complex use cases, see [p-filter](https://github.com/sindresorhus/p-filter).
+
 ### limit.activeCount
 
 The number of promises that are currently running.

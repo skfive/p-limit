@@ -73,3 +73,29 @@ const settledWithIndex = limit.mapSettled(['a', 'b'], async (value, index) => {
 	return value;
 });
 expectType<Promise<Array<PromiseSettledResult<string>>>>(settledWithIndex);
+
+// [T4] LimitFunction.filter resolves to the original input element type, in input order
+expectType<Promise<number[]>>(limit.filter([1, 2, 3], async n => n > 1));
+expectType<Promise<string[]>>(limit.filter(new Set(['a', 'b']), value => value !== 'a'));
+expectType<Promise<number[]>>(limit.filter([1, 2, 3].values(), n => n > 1));
+
+// [T5] filter accepts an async iterable with the same element return type
+expectType<Promise<number[]>>(limit.filter(asyncSource(), async n => n > 0));
+
+// [T6] filter accepts both sync and async (PromiseLike<boolean>) predicates
+expectType<Promise<number[]>>(limit.filter([1, 2, 3], n => n > 1));
+
+// [T7] the predicate's `index` parameter is inferred as `number`
+const filteredWithIndex = limit.filter(['a', 'b'], async (value, index) => {
+	expectType<string>(value);
+	expectType<number>(index);
+	return index > 0;
+});
+expectType<Promise<string[]>>(filteredWithIndex);
+
+// [T8] limitFunction() returns a filter delegating with the same typing
+const limitedForFilter = limitFunction(async (n: number) => n, {concurrency: 1});
+expectType<Promise<number[]>>(limitedForFilter.filter([1, 2, 3], async n => n > 1));
+
+// [T9] a predicate returning a non-boolean is a type error
+expectError(limit.filter([1, 2, 3], async n => n));

@@ -478,6 +478,39 @@ export default function pLimit(concurrency) {
 				return Promise.allSettled(mapEager(iterable, function_));
 			},
 		},
+		filter: {
+			async value(iterable, predicateFunction) {
+				// Shares the same lazy async / eager sync draw engine as `map`: each
+				// predicate runs through `generator`, so `active <= concurrency` stays
+				// enforced by the limiter. Only the aggregation differs — keep the
+				// original items whose predicate resolved truthy, in input (draw) order
+				// regardless of completion order. Like `map` (and unlike `mapSettled`), a
+				// predicate rejection is fatal: it rejects the whole call with that reason
+				// and, for async iterables, calls the iterator's `return()` once.
+				if (typeof iterable[Symbol.asyncIterator] === 'function') {
+					const values = [];
+
+					// Reuse `mapAsyncIterable` in non-settle mode: it resolves to the
+					// per-draw predicate verdicts (or rejects on the first predicate/
+					// iterator failure with one `return()` cleanup). Recording each value
+					// by its draw index keeps `values`/`verdicts` aligned for compaction.
+					const verdicts = await mapAsyncIterable(iterable[Symbol.asyncIterator](), async (value, index) => {
+						values[index] = value;
+						return predicateFunction(value, index);
+					}, false);
+
+					return values.filter((value, index) => verdicts[index]);
+				}
+
+				// Sync iterables keep the eager path: materialize once, schedule every
+				// predicate through the shared `mapEager` draw construction, then compact
+				// by JavaScript truthiness (`Array.prototype.filter` on the verdicts).
+				const values = [...iterable];
+				const verdicts = await Promise.all(mapEager(values, predicateFunction));
+
+				return values.filter((value, index) => verdicts[index]);
+			},
+		},
 		subscribe: {
 			value(listener) {
 				if (typeof listener !== 'function') {
@@ -556,6 +589,15 @@ export function limitFunction(function_, options) {
 
 			set(newConcurrency) {
 				limit.concurrency = newConcurrency;
+			},
+		},
+		filter: {
+			value(iterable, predicateFunction) {
+				// Delegate to the underlying limiter's `filter` — no scheduling or
+				// aggregation logic is duplicated here. (`limit.filter` is the p-limit
+				// method, not `Array#filter`; the disable silences that misdetection.)
+				// eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
+				return limit.filter(iterable, predicateFunction);
 			},
 		},
 		subscribe: {

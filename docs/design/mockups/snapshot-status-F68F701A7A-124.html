@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>snapshot().status — README 정보구조 mockup (F68F701A7A-125)</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f6f8fa;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-muted: #59636e;
+    --accent: #0969da;
+    --code: #0550ae;
+    --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .doc {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 24px 72px;
+  }
+  .doc-note {
+    background: #fff8c5;
+    border: 1px solid #d4a72c66;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 28px;
+  }
+  h1 { font-size: 28px; font-weight: 600; line-height: 1.25; margin: 0 0 4px; }
+  h2 {
+    font-size: 20px; font-weight: 600; line-height: 1.25;
+    margin: 36px 0 12px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  p { margin: 12px 0; }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--code);
+  }
+  a { color: var(--accent); text-decoration: none; }
+  .caption { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  thead th { background: var(--surface); font-weight: 600; }
+  tbody tr:nth-child(even) td { background: #fafbfc; }
+  .prio {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    text-align: center;
+    width: 68px;
+  }
+  .status-cell code { font-weight: 600; }
+
+  /* 색은 보조. 순위 숫자 + monospace 문자열 + 조건식이 정보의 주 전달자. */
+  .status-cell[data-status="idle"] code { border-left: 3px solid #8b949e; }
+  .status-cell[data-status="active"] code { border-left: 3px solid #1a7f37; }
+  .status-cell[data-status="saturated"] code { border-left: 3px solid #bc4c00; }
+  .status-cell[data-status="paused"] code { border-left: 3px solid #0969da; }
+
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    line-height: 1.5;
+    margin: 14px 0;
+  }
+  pre .cmt { color: var(--text-muted); }
+  pre .kw { color: #cf222e; }
+  pre .str { color: #0a3069; }
+
+  .notes { padding-left: 20px; margin: 12px 0; }
+  .notes li { margin: 6px 0; }
+  .legend {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+  <main class="doc">
+    <div class="doc-note">
+      시각 mockup — 실제 README 는 아니며 시안 시각화용입니다. 정본 문구는
+      <code>docs/design/snapshot-status-F68F701A7A-124.md</code> §5·§6 의 영어 블록입니다.
+      정보 전달은 색이 아니라 <strong>순위 숫자 · status 문자열 · 조건식</strong>에 의존합니다.
+    </div>
+
+    <h1><code>snapshot()</code> — status</h1>
+    <p>
+      <code>snapshot()</code> also returns a <code>status</code> field: a single derived,
+      human-facing label summarizing the limiter's current state. It is
+      <code>'idle'</code>, <code>'active'</code>, <code>'saturated'</code>, or
+      <code>'paused'</code>, chosen by a fixed priority order.
+    </p>
+
+    <h2>Status table</h2>
+    <p>
+      The status is derived by checking these conditions in order and taking the
+      <strong>first</strong> one that matches (higher priority wins):
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th class="prio">Priority</th>
+          <th><code>status</code></th>
+          <th>Condition (first match wins)</th>
+          <th>Meaning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="prio">1</td>
+          <td class="status-cell" data-status="paused"><code>'paused'</code></td>
+          <td><code>isPaused === true</code></td>
+          <td>Paused; no queued task starts until <code>resume()</code>.</td>
+        </tr>
+        <tr>
+          <td class="prio">2</td>
+          <td class="status-cell" data-status="saturated"><code>'saturated'</code></td>
+          <td><code>activeCount &gt;= concurrency</code></td>
+          <td>Every concurrency slot is occupied; no free slot.</td>
+        </tr>
+        <tr>
+          <td class="prio">3</td>
+          <td class="status-cell" data-status="active"><code>'active'</code></td>
+          <td><code>activeCount &gt; 0</code></td>
+          <td>At least one task is running and a free slot still remains.</td>
+        </tr>
+        <tr>
+          <td class="prio">4</td>
+          <td class="status-cell" data-status="idle"><code>'idle'</code></td>
+          <td><code>activeCount === 0</code></td>
+          <td>Nothing is running.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="legend">
+      색상 독립성 확인: Priority(1–4) 열과 status 문자열, Condition 조건식만으로 4개 상태가
+      완전히 구분됩니다. 좌측 세로선 색은 보조 표기이며 제거해도 정보 손실이 없습니다.
+    </p>
+
+    <h2>Notes</h2>
+    <ul class="notes">
+      <li><strong>Priority is fixed</strong> as <code>paused</code> &gt; <code>saturated</code>
+        &gt; <code>active</code> &gt; <code>idle</code>. For example, a saturated limiter that is
+        then paused reports <code>'paused'</code>.</li>
+      <li><strong>Infinite concurrency is never <code>'saturated'</code>.</strong> With
+        <code>concurrency</code> set to <code>Infinity</code>,
+        <code>activeCount &gt;= Infinity</code> is always <code>false</code>, so the status is
+        only ever <code>'paused'</code>, <code>'active'</code>, or <code>'idle'</code>. This
+        matches <code>isSaturated</code>.</li>
+      <li><strong><code>pendingCount</code> does not affect <code>status</code>.</strong> A
+        limiter with queued-but-not-started tasks (<code>activeCount === 0</code>, not paused) is
+        still <code>'idle'</code>. Do not read <code>'idle'</code> status as "the queue is empty";
+        use <code>pendingCount</code>/<code>isIdle</code> for that.</li>
+      <li><strong><code>snapshot().status</code> and the <code>subscribe()</code> payload
+        agree.</strong> At the same moment both surfaces derive the same <code>status</code>
+        value from the same rules.</li>
+    </ul>
+
+    <h2>Example — reading <code>snapshot().status</code></h2>
+    <pre><span class="kw">import</span> pLimit <span class="kw">from</span> <span class="str">'p-limit'</span>;
+
+<span class="kw">const</span> limit = <span class="kw">pLimit</span>(2);
+
+limit.<span class="kw">snapshot</span>().status; <span class="cmt">//=&gt; 'idle'</span>
+
+limit(() =&gt; <span class="kw">new</span> Promise(() =&gt; {})); <span class="cmt">// start one long-running task</span>
+limit.<span class="kw">snapshot</span>().status; <span class="cmt">//=&gt; 'active'</span>
+
+limit(() =&gt; <span class="kw">new</span> Promise(() =&gt; {})); <span class="cmt">// fill the second (last) slot</span>
+limit.<span class="kw">snapshot</span>().status; <span class="cmt">//=&gt; 'saturated'</span>
+
+limit.<span class="kw">pause</span>();
+limit.<span class="kw">snapshot</span>().status; <span class="cmt">//=&gt; 'paused'  (priority: paused wins over saturated)</span></pre>
+
+    <h2>Example — <code>limitFunction</code> shares the same status</h2>
+    <pre><span class="kw">import</span> {limitFunction} <span class="kw">from</span> <span class="str">'p-limit'</span>;
+
+<span class="kw">const</span> run = <span class="kw">limitFunction</span>(<span class="kw">async</span> () =&gt; doSomething(), {concurrency: 1});
+
+<span class="cmt">// `limitFunction` delegates `snapshot()` to its underlying limiter, so it</span>
+<span class="cmt">// exposes the exact same `status` contract and values.</span>
+run.<span class="kw">snapshot</span>().status; <span class="cmt">//=&gt; 'idle'</span>
+
+run(); <span class="cmt">// occupies the single slot</span>
+run.<span class="kw">snapshot</span>().status; <span class="cmt">//=&gt; 'saturated'</span></pre>
+
+    <h2>Example — infinite concurrency (optional)</h2>
+    <pre><span class="kw">const</span> unbounded = <span class="kw">pLimit</span>(Infinity);
+
+unbounded(() =&gt; <span class="kw">new</span> Promise(() =&gt; {}));
+unbounded.<span class="kw">snapshot</span>().status; <span class="cmt">//=&gt; 'active'  (never 'saturated' with Infinity)</span></pre>
+  </main>
+</body>
+</html>

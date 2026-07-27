@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>스냅샷 진단 데모 시안 — F68F701A7A-119</title>
+  <style>
+    :root {
+      /* frozen tokens (ui-contract@v1) — 재정의 금지 */
+      --color-status-running: #16a34a;
+      --color-status-paused:  #d97706;
+      --color-status-idle:    #64748b;
+      --space-card-gap: 12px;
+      --radius-card: 8px;
+
+      /* 보조 팔레트 (계약 밖 — mockup 표현용) */
+      --color-bg: #f8fafc;
+      --color-card-bg: #ffffff;
+      --color-card-border: #e2e8f0;
+      --color-heading: #0f172a;
+      --color-body: #334155;
+      --color-muted: #64748b;
+
+      --badge-running-bg: #dcfce7;
+      --badge-running-fg: #166534;
+      --badge-paused-bg:  #fef3c7;
+      --badge-paused-fg:  #92400e;
+      --badge-idle-bg:    #f1f5f9;
+      --badge-idle-fg:    #475569;
+
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans KR", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--color-bg);
+      color: var(--color-body);
+      font-family: var(--font-sans);
+      line-height: 1.5;
+      padding: 24px 16px 64px;
+    }
+
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.3;
+      color: var(--color-heading);
+      margin: 0 0 4px;
+    }
+    .subtitle {
+      font-size: 12px;
+      color: var(--color-muted);
+      margin: 0 0 24px;
+    }
+
+    h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--color-heading);
+      margin: 32px 0 4px;
+    }
+    .section-note {
+      font-size: 12px;
+      color: var(--color-muted);
+      margin: 0 0 12px;
+    }
+
+    /* ── 상태 데모 카드 그룹 (한 상태 = 한 데모 인스턴스) ── */
+    .demo-instance {
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-card-border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: var(--space-card-gap);
+    }
+    .demo-instance__title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-heading);
+      margin-bottom: 12px;
+    }
+    .state-badge {
+      display: inline-block;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.2;
+      padding: 2px 10px;
+      border-radius: 999px;
+    }
+    .state-badge--running { background: var(--badge-running-bg); color: var(--badge-running-fg); }
+    .state-badge--paused  { background: var(--badge-paused-bg);  color: var(--badge-paused-fg); }
+    .state-badge--idle    { background: var(--badge-idle-bg);    color: var(--badge-idle-fg); }
+    .demo-instance__caption {
+      font-size: 12px;
+      color: var(--color-muted);
+      margin: -6px 0 12px;
+    }
+
+    /* ── frozen: .status-panel / .status-card ── */
+    .status-panel {
+      display: grid;
+      gap: var(--space-card-gap);
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+    .status-card {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-card-border);
+      border-left: 4px solid var(--color-status-idle);
+      border-radius: var(--radius-card);
+      padding: 12px 14px;
+    }
+    .status-card__label {
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.3;
+      color: var(--color-muted);
+    }
+    .status-card__value {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.1;
+      color: var(--color-heading);
+      overflow-wrap: anywhere;
+    }
+    .status-card__state-text {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-muted);
+    }
+
+    /* frozen modifier */
+    .status-card--running {
+      border-left-color: var(--color-status-running);
+    }
+    .status-card--running .status-card__value,
+    .status-card--running .status-card__state-text {
+      color: var(--color-status-running);
+    }
+    .status-card--paused {
+      border-left-color: var(--color-status-paused);
+    }
+    .status-card--paused .status-card__value,
+    .status-card--paused .status-card__state-text {
+      color: var(--color-status-paused);
+    }
+
+    /* ── frozen: .demo-controls ── */
+    .demo-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .demo-controls__button {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1;
+      padding: 10px 14px;
+      border: 1px solid var(--color-card-border);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--color-heading);
+      cursor: pointer;
+    }
+    .demo-controls__button:hover { background: #f1f5f9; }
+    .demo-controls__button:focus-visible {
+      outline: 2px solid var(--color-status-running);
+      outline-offset: 2px;
+    }
+    .demo-controls__button[aria-disabled="true"] {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    /* 토큰 범례 */
+    .token-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .token-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border: 1px solid var(--color-card-border);
+      border-radius: 6px;
+      background: #fff;
+    }
+    .swatch {
+      width: 14px; height: 14px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+    code { font-family: var(--font-mono); font-size: 12px; }
+
+    /* 반응형 데모 프레임 */
+    .viewport-frame {
+      border: 1px dashed #94a3b8;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+      margin-bottom: var(--space-card-gap);
+    }
+    .viewport-frame__label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-muted);
+      margin-bottom: 8px;
+    }
+    .frame-320 { max-width: 320px; }
+    .frame-320 .status-panel { grid-template-columns: 1fr; } /* 세로 스택 */
+    .frame-640 { max-width: 640px; }
+    .frame-640 .status-panel { grid-template-columns: repeat(2, 1fr); } /* 다열 grid */
+  </style>
+</head>
+<body>
+<main class="page">
+  <h1>스냅샷 진단 데모 시안</h1>
+  <p class="subtitle">F68F701A7A-119 · designer mockup(정적 시각화 전용, dev 산출물 아님) · frozen ui-contract@v1 반영</p>
+
+  <!-- ─────────────── 상태별 시각화 ─────────────── -->
+  <h2>1. 상태별 시각 (idle · running · paused · resumed · cleared)</h2>
+  <p class="section-note">각 상태는 <strong>색상 강조 + 화면 텍스트 라벨</strong> 두 가지로 동시에 구분한다(색상만으로 구분 금지).</p>
+
+  <!-- idle -->
+  <section class="demo-instance">
+    <div class="demo-instance__title">
+      idle <span class="state-badge state-badge--idle">유휴</span>
+    </div>
+    <p class="demo-instance__caption">초기 상태 · 실행·대기 모두 0 · 주 실행 control 사용 가능.</p>
+    <div class="status-panel" aria-live="polite" aria-label="상태 스냅샷 (idle)">
+      <div class="status-card">
+        <span class="status-card__label">실행 중 작업</span>
+        <span class="status-card__value">0</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">대기 작업</span>
+        <span class="status-card__value">0</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">동시 실행 한도</span>
+        <span class="status-card__value">2</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">일시정지 상태</span>
+        <span class="status-card__state-text">실행 가능</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- running -->
+  <section class="demo-instance">
+    <div class="demo-instance__title">
+      running <span class="state-badge state-badge--running">실행 중</span>
+    </div>
+    <p class="demo-instance__caption">작업 추가 후 · 활성 작업 존재 · 미일시정지 → 활성 카드에 <code>.status-card--running</code>.</p>
+    <div class="status-panel" aria-live="polite" aria-label="상태 스냅샷 (running)">
+      <div class="status-card status-card--running">
+        <span class="status-card__label">실행 중 작업</span>
+        <span class="status-card__value">2</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">대기 작업</span>
+        <span class="status-card__value">3</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">동시 실행 한도</span>
+        <span class="status-card__value">2</span>
+      </div>
+      <div class="status-card status-card--running">
+        <span class="status-card__label">일시정지 상태</span>
+        <span class="status-card__state-text">실행 중</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- paused -->
+  <section class="demo-instance">
+    <div class="demo-instance__title">
+      paused <span class="state-badge state-badge--paused">일시정지</span>
+    </div>
+    <p class="demo-instance__caption"><code>pause()</code> 후 · 대기 승격 중단 · 실행 중 작업은 계속 settle → 일시정지 카드에 <code>.status-card--paused</code>.</p>
+    <div class="status-panel" aria-live="polite" aria-label="상태 스냅샷 (paused)">
+      <div class="status-card status-card--running">
+        <span class="status-card__label">실행 중 작업</span>
+        <span class="status-card__value">2</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">대기 작업</span>
+        <span class="status-card__value">3</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">동시 실행 한도</span>
+        <span class="status-card__value">2</span>
+      </div>
+      <div class="status-card status-card--paused">
+        <span class="status-card__label">일시정지 상태</span>
+        <span class="status-card__state-text">일시정지</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- resumed -->
+  <section class="demo-instance">
+    <div class="demo-instance__title">
+      resumed <span class="state-badge state-badge--running">실행 중</span>
+    </div>
+    <p class="demo-instance__caption"><code>resume()</code> 후 · running으로 복귀 · 대기 작업이 한도까지 승격.</p>
+    <div class="status-panel" aria-live="polite" aria-label="상태 스냅샷 (resumed)">
+      <div class="status-card status-card--running">
+        <span class="status-card__label">실행 중 작업</span>
+        <span class="status-card__value">2</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">대기 작업</span>
+        <span class="status-card__value">1</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">동시 실행 한도</span>
+        <span class="status-card__value">2</span>
+      </div>
+      <div class="status-card status-card--running">
+        <span class="status-card__label">일시정지 상태</span>
+        <span class="status-card__state-text">실행 중</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- cleared -->
+  <section class="demo-instance">
+    <div class="demo-instance__title">
+      cleared <span class="state-badge state-badge--idle">대기열 비움 → 유휴</span>
+    </div>
+    <p class="demo-instance__caption"><code>clearQueue()</code> 후 · 대기 0으로 · 상태·진행 표시 초기값 복귀 · <code>#demo-add-task</code> 재사용 가능(후조건).</p>
+    <div class="status-panel" aria-live="polite" aria-label="상태 스냅샷 (cleared)">
+      <div class="status-card">
+        <span class="status-card__label">실행 중 작업</span>
+        <span class="status-card__value">0</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">대기 작업</span>
+        <span class="status-card__value">0</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">동시 실행 한도</span>
+        <span class="status-card__value">2</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">일시정지 상태</span>
+        <span class="status-card__state-text">실행 가능</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── 컨트롤 ─────────────── -->
+  <h2>2. 데모 컨트롤 (.demo-controls)</h2>
+  <p class="section-note">모든 control은 시맨틱 <code>&lt;button&gt;</code> · 명시적 <code>aria-label</code> · Tab/Enter/Space 조작 가능.</p>
+  <div class="demo-controls">
+    <button type="button" class="demo-controls__button" id="demo-add-task" aria-label="작업 추가">작업 추가</button>
+    <button type="button" class="demo-controls__button" id="demo-pause" aria-label="일시정지">일시정지</button>
+    <button type="button" class="demo-controls__button" id="demo-resume" aria-label="재개">재개</button>
+    <button type="button" class="demo-controls__button" id="demo-clear" aria-label="대기열 비우기">대기열 비우기</button>
+  </div>
+  <p class="section-note" style="margin-top:8px;">비활성 예시(선택): 일시정지 아닐 때 재개 버튼 — <code>aria-disabled="true"</code>.</p>
+  <div class="demo-controls">
+    <button type="button" class="demo-controls__button" aria-label="재개" aria-disabled="true">재개(비활성 예)</button>
+  </div>
+
+  <!-- ─────────────── 토큰 범례 ─────────────── -->
+  <h2>3. 디자인 토큰 (frozen)</h2>
+  <div class="token-legend">
+    <span class="token-chip"><span class="swatch" style="background:var(--color-status-running)"></span> <code>--color-status-running #16a34a</code></span>
+    <span class="token-chip"><span class="swatch" style="background:var(--color-status-paused)"></span> <code>--color-status-paused #d97706</code></span>
+    <span class="token-chip"><span class="swatch" style="background:var(--color-status-idle)"></span> <code>--color-status-idle #64748b</code></span>
+    <span class="token-chip"><code>--space-card-gap 12px</code></span>
+    <span class="token-chip"><code>--radius-card 8px</code></span>
+  </div>
+
+  <!-- ─────────────── 반응형 ─────────────── -->
+  <h2>4. 반응형 동작 (frozen)</h2>
+  <p class="section-note">아래 프레임은 각 뷰포트 폭에서의 <code>.status-panel</code> 레이아웃을 고정 시뮬레이션한 것이다(실제 창 크기와 무관).</p>
+
+  <div class="viewport-frame frame-320">
+    <div class="viewport-frame__label">≥320px — 세로 스택 (1열, overflow 없음)</div>
+    <div class="status-panel" aria-label="반응형 320px 예시">
+      <div class="status-card status-card--running">
+        <span class="status-card__label">실행 중 작업</span>
+        <span class="status-card__value">2</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">대기 작업</span>
+        <span class="status-card__value">3</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">동시 실행 한도</span>
+        <span class="status-card__value">2</span>
+      </div>
+      <div class="status-card status-card--paused">
+        <span class="status-card__label">일시정지 상태</span>
+        <span class="status-card__state-text">일시정지</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="viewport-frame frame-640">
+    <div class="viewport-frame__label">≥640px — 다열 grid (2열 이상 확장)</div>
+    <div class="status-panel" aria-label="반응형 640px 예시">
+      <div class="status-card status-card--running">
+        <span class="status-card__label">실행 중 작업</span>
+        <span class="status-card__value">2</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">대기 작업</span>
+        <span class="status-card__value">3</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">동시 실행 한도</span>
+        <span class="status-card__value">∞</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">일시정지 상태</span>
+        <span class="status-card__state-text">실행 가능</span>
+      </div>
+    </div>
+  </div>
+
+  <p class="section-note" style="margin-top:24px;">
+    본 mockup은 시안 시각화 전용이다. dev는 이를 참조 가이드로 사용하되 픽셀 단위 일치 의무는 없으며,
+    frozen selector(DOM ID · CSS class) · token · 상태 텍스트 라벨 · aria 계약만 반드시 준수한다.
+  </p>
+</main>
+</body>
+</html>

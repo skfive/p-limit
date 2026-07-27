@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inspector 시각 명세 mockup — F68F701A7A-76</title>
+  <style>
+    /* ── frozen design token (이름 재정의 금지 / 값은 designer 명세) ── */
+    :root {
+      --inspector-color-idle:      #475569;
+      --inspector-color-active:    #15803d;
+      --inspector-color-saturated: #b45309;
+      --inspector-color-paused:    #6d28d9;
+      --inspector-space-gap:       12px;
+
+      /* 보조 팔레트 (토큰 아님 — 시각 시안 참고값) */
+      --bg:        #f8fafc;
+      --surface:   #ffffff;
+      --border:    #e2e8f0;
+      --text:      #0f172a;
+      --muted:     #475569;
+      --disabled-bg:   #cbd5e1;
+      --disabled-fg:   #94a3b8;
+
+      --inspector-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--inspector-font);
+      line-height: 1.5;
+      padding: 32px 20px 64px;
+    }
+    .page-title { font-size: 1.5rem; font-weight: 700; margin: 0 0 4px; }
+    .page-sub   { color: var(--muted); font-size: 0.875rem; margin: 0 0 28px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      max-width: 1040px;
+    }
+    .cell-caption {
+      font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--muted); margin: 0 0 8px;
+    }
+
+    /* ── Inspector 카드 (.inspector / #inspector-root) ── */
+    .inspector {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+      padding: 20px;
+      max-width: 480px;
+    }
+    .inspector__title { font-size: 1.25rem; font-weight: 600; margin: 0 0 16px; }
+
+    /* ── 상태 배지 (.inspector__badge / #inspector-status-badge) ── */
+    .inspector__badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 4px 12px; border-radius: 999px;
+      color: #fff; font-size: 0.875rem; font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .inspector__badge::before {
+      content: ""; width: 8px; height: 8px; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.65);
+    }
+    .inspector__badge[data-status="idle"]      { background: var(--inspector-color-idle); }
+    .inspector__badge[data-status="active"]    { background: var(--inspector-color-active); }
+    .inspector__badge[data-status="saturated"] { background: var(--inspector-color-saturated); }
+    .inspector__badge[data-status="paused"]    { background: var(--inspector-color-paused); }
+
+    /* ── 지표 (.inspector__metric) ── */
+    .metrics {
+      display: flex; gap: var(--inspector-space-gap); margin-bottom: 16px;
+    }
+    .inspector__metric {
+      flex: 1; min-width: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .inspector__metric .label {
+      font-size: 0.6875rem; font-weight: 500; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--muted); white-space: nowrap;
+    }
+    .inspector__metric .value {
+      font-size: 1.75rem; font-weight: 700; line-height: 1.1;
+      font-variant-numeric: tabular-nums; margin-top: 4px;
+    }
+
+    /* ── control (.inspector__controls / .inspector__control) ── */
+    .inspector__controls { display: flex; gap: var(--inspector-space-gap); }
+    .inspector__control {
+      font-family: inherit; font-size: 0.875rem; font-weight: 600;
+      padding: 8px 14px; border-radius: 8px; cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .inspector__control:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+    .inspector__control--primary   { background: var(--text); color: #fff; }
+    .inspector__control--primary:hover { background: #1e293b; }
+    .inspector__control--secondary {
+      background: var(--surface); color: var(--text); border-color: #cbd5e1;
+    }
+    .inspector__control--secondary:hover { background: #f1f5f9; }
+    .inspector__control:active:not([aria-disabled="true"]) { transform: translateY(1px); }
+    .inspector__control[aria-disabled="true"] {
+      background: var(--disabled-bg); color: var(--disabled-fg);
+      border-color: var(--disabled-bg); cursor: not-allowed;
+    }
+
+    /* ── 반응형: <480px controls 세로 스택 (frozen §4.7) ── */
+    @media (max-width: 479px) {
+      .inspector__controls { flex-direction: column; }
+      .inspector__control  { width: 100%; }
+    }
+
+    /* 상태별 흐름 설명 표 */
+    .flow {
+      max-width: 1040px; margin-top: 40px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px;
+    }
+    .flow h2 { font-size: 1.125rem; margin: 0 0 12px; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.8125rem; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; }
+    .swatch-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+    .swatch {
+      display: flex; align-items: center; gap: 8px; font-size: 0.8125rem;
+    }
+    .swatch i {
+      width: 20px; height: 20px; border-radius: 6px; display: inline-block;
+    }
+    .note { color: var(--muted); font-size: 0.8125rem; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1 class="page-title">Limiter Inspector — 시각 명세 mockup</h1>
+  <p class="page-sub">
+    F68F701A7A-76 · 시안 시각화용(런타임 아님). 4개 상태 + 취소/복원 흐름 + 반응형 시안.
+    domId/cssClass/토큰명/상태 텍스트는 frozen 계약(ui-contract@v1) 그대로.
+  </p>
+
+  <div class="grid">
+
+    <!-- ── idle ── -->
+    <div>
+      <p class="cell-caption">idle — 유휴 (초기값)</p>
+      <div class="inspector" id="inspector-root">
+        <h2 class="inspector__title">Limiter Inspector</h2>
+        <span class="inspector__badge" id="inspector-status-badge" data-status="idle" aria-live="polite">Idle</span>
+        <div class="metrics">
+          <div class="inspector__metric"><div class="label">Active</div><div class="value" id="inspector-active-count">0</div></div>
+          <div class="inspector__metric"><div class="label">Pending</div><div class="value" id="inspector-pending-count">0</div></div>
+          <div class="inspector__metric"><div class="label">Concurrency</div><div class="value" id="inspector-concurrency-value">2</div></div>
+        </div>
+        <div class="inspector__controls">
+          <button class="inspector__control inspector__control--primary"   id="inspector-enqueue" aria-label="Enqueue a task">Enqueue</button>
+          <button class="inspector__control inspector__control--secondary" id="inspector-clear" aria-label="Clear pending queue" aria-disabled="true">Clear queue</button>
+          <button class="inspector__control inspector__control--secondary" id="inspector-pause" aria-label="Pause the limiter">Pause</button>
+          <button class="inspector__control inspector__control--secondary" id="inspector-resume" aria-label="Resume the limiter" aria-disabled="true">Resume</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── active ── -->
+    <div>
+      <p class="cell-caption">active — 실행 중 (Running)</p>
+      <div class="inspector">
+        <h2 class="inspector__title">Limiter Inspector</h2>
+        <span class="inspector__badge" data-status="active" aria-live="polite">Running</span>
+        <div class="metrics">
+          <div class="inspector__metric"><div class="label">Active</div><div class="value">1</div></div>
+          <div class="inspector__metric"><div class="label">Pending</div><div class="value">0</div></div>
+          <div class="inspector__metric"><div class="label">Concurrency</div><div class="value">2</div></div>
+        </div>
+        <div class="inspector__controls">
+          <button class="inspector__control inspector__control--primary"   aria-label="Enqueue a task">Enqueue</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Clear pending queue" aria-disabled="true">Clear queue</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Pause the limiter">Pause</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Resume the limiter" aria-disabled="true">Resume</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── saturated ── -->
+    <div>
+      <p class="cell-caption">saturated — 한도 도달 + 대기 (Saturated)</p>
+      <div class="inspector">
+        <h2 class="inspector__title">Limiter Inspector</h2>
+        <span class="inspector__badge" data-status="saturated" aria-live="polite">Saturated</span>
+        <div class="metrics">
+          <div class="inspector__metric"><div class="label">Active</div><div class="value">2</div></div>
+          <div class="inspector__metric"><div class="label">Pending</div><div class="value">3</div></div>
+          <div class="inspector__metric"><div class="label">Concurrency</div><div class="value">2</div></div>
+        </div>
+        <div class="inspector__controls">
+          <button class="inspector__control inspector__control--primary"   aria-label="Enqueue a task">Enqueue</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Clear pending queue">Clear queue</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Pause the limiter">Pause</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Resume the limiter" aria-disabled="true">Resume</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── paused ── -->
+    <div>
+      <p class="cell-caption">paused — 일시정지 (Paused)</p>
+      <div class="inspector">
+        <h2 class="inspector__title">Limiter Inspector</h2>
+        <span class="inspector__badge" data-status="paused" aria-live="polite">Paused</span>
+        <div class="metrics">
+          <div class="inspector__metric"><div class="label">Active</div><div class="value">1</div></div>
+          <div class="inspector__metric"><div class="label">Pending</div><div class="value">2</div></div>
+          <div class="inspector__metric"><div class="label">Concurrency</div><div class="value">2</div></div>
+        </div>
+        <div class="inspector__controls">
+          <button class="inspector__control inspector__control--primary"   aria-label="Enqueue a task">Enqueue</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Clear pending queue">Clear queue</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Pause the limiter" aria-disabled="true">Pause</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Resume the limiter">Resume</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── clearQueue 복원 후 (후조건 §4.8) ── -->
+    <div>
+      <p class="cell-caption">clearQueue/실패 후 복원 — Idle 수렴 (후조건 §4.8)</p>
+      <div class="inspector">
+        <h2 class="inspector__title">Limiter Inspector</h2>
+        <span class="inspector__badge" data-status="idle" aria-live="polite">Idle</span>
+        <div class="metrics">
+          <div class="inspector__metric"><div class="label">Active</div><div class="value">0</div></div>
+          <div class="inspector__metric"><div class="label">Pending</div><div class="value">0</div></div>
+          <div class="inspector__metric"><div class="label">Concurrency</div><div class="value">2</div></div>
+        </div>
+        <div class="inspector__controls">
+          <button class="inspector__control inspector__control--primary"   aria-label="Enqueue a task">Enqueue</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Clear pending queue" aria-disabled="true">Clear queue</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Pause the limiter">Pause</button>
+          <button class="inspector__control inspector__control--secondary" aria-label="Resume the limiter" aria-disabled="true">Resume</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 반응형 <480px 미리보기 ── -->
+    <div>
+      <p class="cell-caption">&lt;480px — controls 세로 스택 (frozen §4.7)</p>
+      <div class="inspector" style="max-width: 300px;">
+        <h2 class="inspector__title">Limiter Inspector</h2>
+        <span class="inspector__badge" data-status="active" aria-live="polite">Running</span>
+        <div class="metrics">
+          <div class="inspector__metric"><div class="label">Active</div><div class="value">1</div></div>
+          <div class="inspector__metric"><div class="label">Pending</div><div class="value">1</div></div>
+          <div class="inspector__metric"><div class="label">Conc.</div><div class="value">2</div></div>
+        </div>
+        <div class="inspector__controls" style="flex-direction: column;">
+          <button class="inspector__control inspector__control--primary"   style="width:100%" aria-label="Enqueue a task">Enqueue</button>
+          <button class="inspector__control inspector__control--secondary" style="width:100%" aria-label="Clear pending queue">Clear queue</button>
+          <button class="inspector__control inspector__control--secondary" style="width:100%" aria-label="Pause the limiter">Pause</button>
+          <button class="inspector__control inspector__control--secondary" style="width:100%" aria-label="Resume the limiter" aria-disabled="true">Resume</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── 상태 토큰 · 흐름 요약 ── -->
+  <div class="flow">
+    <h2>상태 토큰 매핑 (frozen 토큰명 → designer 구체 값)</h2>
+    <table>
+      <thead><tr><th>status (API §3.3)</th><th>화면 텍스트</th><th>토큰</th><th>HEX</th></tr></thead>
+      <tbody>
+        <tr><td>idle</td><td>Idle</td><td>--inspector-color-idle</td><td>#475569</td></tr>
+        <tr><td>active</td><td>Running</td><td>--inspector-color-active</td><td>#15803d</td></tr>
+        <tr><td>saturated</td><td>Saturated</td><td>--inspector-color-saturated</td><td>#b45309</td></tr>
+        <tr><td>paused</td><td>Paused</td><td>--inspector-color-paused</td><td>#6d28d9</td></tr>
+      </tbody>
+    </table>
+    <div class="swatch-row">
+      <span class="swatch"><i style="background:#475569"></i> idle · Idle</span>
+      <span class="swatch"><i style="background:#15803d"></i> active · Running</span>
+      <span class="swatch"><i style="background:#b45309"></i> saturated · Saturated</span>
+      <span class="swatch"><i style="background:#6d28d9"></i> paused · Paused</span>
+    </div>
+    <p class="note">
+      상태는 색상 + 화면 텍스트 라벨 + 접근성 이름을 항상 함께 노출한다(색상만으로 구분 금지).
+      배지는 aria-live="polite" 영역이며, 4개 control은 각각 명시적 aria-label과 Tab 접근을 가진다.
+      취소(clearQueue)/일시정지/실패 후 limiter가 idle이 되면 UI는 Idle + 지표 0 + enqueue 활성으로 수렴한다.
+    </p>
+  </div>
+</body>
+</html>

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>배치 진행 데모 — 시각 시안 (F68F701A7A-52)</title>
+  <style>
+    :root {
+      /* 동결 design token — developer가 그대로 정의/사용 */
+      --color-status-pending:   #64748B;
+      --color-status-running:   #2563EB;
+      --color-status-done:      #16A34A;
+      --color-status-cancelled: #D97706;
+      --color-status-failed:    #DC2626;
+      --space-control-gap:      12px;
+
+      /* 보조 색 (시안 표현용 — token 아님) */
+      --bg:      #FFFFFF;
+      --surface: #F8FAFC;
+      --track:   #F1F5F9;
+      --text:    #0F172A;
+      --muted:   #475569;
+      --border:  #E2E8F0;
+      --primary: #2563EB;
+      --primary-hover: #1D4ED8;
+      --disabled: #94A3B8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 24px 16px;
+      background: var(--surface);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Noto Sans KR", "Malgun Gothic", sans-serif;
+      line-height: 1.5;
+    }
+
+    .page-title { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+    .page-note  { color: var(--muted); font-size: 13px; margin: 0 0 24px; }
+    .section-label {
+      font-size: 12px; font-weight: 700; letter-spacing: .04em;
+      color: var(--muted); text-transform: uppercase;
+      margin: 32px 0 12px;
+    }
+
+    /* ── 배치 진행 컴포넌트 (계약 selector 반영) ─────────────── */
+    .batch-progress {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 520px;
+      width: 100%;
+      margin: 0 auto;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+    }
+    .batch-progress + .batch-progress { margin-top: 16px; }
+
+    .batch-progress__heading { font-size: 20px; font-weight: 700; margin: 0 0 16px; }
+
+    .batch-progress__controls {
+      display: flex;
+      flex-wrap: wrap;                 /* 320px 좁은 폭에서 wrap */
+      gap: var(--space-control-gap);   /* 동결 token */
+      margin-bottom: 16px;
+    }
+
+    button {
+      font: inherit;
+      font-weight: 600;
+      border-radius: 8px;
+      padding: 10px 18px;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    #batch-progress-start {
+      background: var(--primary);
+      color: #fff;
+    }
+    #batch-progress-start:hover { background: var(--primary-hover); }
+    #batch-progress-start:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    #batch-progress-start[disabled] {
+      background: var(--disabled);
+      cursor: not-allowed;
+    }
+    #batch-progress-reset {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border);
+    }
+    #batch-progress-reset:hover { background: #F1F5F9; }
+    #batch-progress-reset:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+    .batch-progress__status {
+      font-size: 15px;
+      font-weight: 500;
+      margin: 0 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--color-status-pending);
+      flex: none;
+    }
+
+    .bar-row {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 16px;
+    }
+    .batch-progress__bar {
+      flex: 1;
+      height: 10px;
+      background: var(--track);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .batch-progress__bar > .fill {
+      height: 100%;
+      background: var(--color-status-running);
+      border-radius: 999px;
+      transition: width .3s ease;
+    }
+    #batch-progress-percent {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      font-size: 15px;
+      min-width: 44px;
+      text-align: right;
+    }
+
+    #batch-task-list {
+      list-style: none;
+      margin: 0; padding: 0;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    #batch-task-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left-width: 4px;
+      border-left-color: var(--color-status-pending);
+      border-radius: 8px;
+      font-size: 15px;
+    }
+    .task-name { font-weight: 500; overflow-wrap: anywhere; }
+
+    /* 상태 배지 — 색 + 한글 텍스트 병기 (색만으로 구분 금지) */
+    .badge {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 2px 10px;
+      border-radius: 999px;
+      color: #fff;
+      flex: none;
+    }
+
+    /* 동결 상태 class ↔ token 매핑 */
+    .batch-task--pending   { border-left-color: var(--color-status-pending); }
+    .batch-task--pending   .badge { background: var(--color-status-pending); }
+    .batch-task--running   { border-left-color: var(--color-status-running); }
+    .batch-task--running   .badge { background: var(--color-status-running); }
+    .batch-task--done      { border-left-color: var(--color-status-done); }
+    .batch-task--done      .badge { background: var(--color-status-done); }
+    .batch-task--cancelled { border-left-color: var(--color-status-cancelled); }
+    .batch-task--cancelled .badge { background: var(--color-status-cancelled); }
+    .batch-task--failed    { border-left-color: var(--color-status-failed); }
+    .batch-task--failed    .badge { background: var(--color-status-failed); }
+
+    /* 반응형: 320px ~ 639px */
+    @media (max-width: 639px) {
+      .batch-progress { max-width: 100%; }
+    }
+
+    /* 스냅샷 그리드 */
+    .snapshot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .snap-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .snap-card h3 { margin: 0 0 4px; font-size: 15px; }
+    .snap-card p.desc { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+
+    /* 색상 팔레트 표 */
+    .palette { display: flex; flex-wrap: wrap; gap: 10px; max-width: 720px; margin: 0 auto; }
+    .swatch {
+      display: flex; align-items: center; gap: 8px;
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 12px; font-size: 13px; background: var(--bg);
+    }
+    .swatch .chip { width: 20px; height: 20px; border-radius: 5px; flex: none; }
+    .swatch code { color: var(--muted); }
+  </style>
+</head>
+<body>
+
+  <h1 class="page-title">배치 진행 데모 — 시각 시안</h1>
+  <p class="page-note">
+    F68F701A7A-52 · 시안 시각화 전용 mockup (dev 실제 산출물 아님).
+    domId·cssClass·design token 이름은 frozen UI 계약 그대로 사용.
+  </p>
+
+  <!-- ── 대표 상태: 실행 중 ─────────────────────────────── -->
+  <p class="section-label">대표 화면 — 실행 중</p>
+  <div id="batch-progress-root" class="batch-progress">
+    <h2 class="batch-progress__heading">배치 진행 데모</h2>
+
+    <div class="batch-progress__controls">
+      <button id="batch-progress-start" aria-label="배치 시작" disabled>시작</button>
+      <button id="batch-progress-reset" aria-label="배치 초기화">초기화</button>
+    </div>
+
+    <p id="batch-progress-status" class="batch-progress__status" aria-live="polite">
+      <span class="status-dot" style="background: var(--color-status-running);"></span>
+      실행 중…
+    </p>
+
+    <div class="bar-row">
+      <div id="batch-progress-bar" class="batch-progress__bar"
+           role="progressbar" aria-valuenow="40" aria-valuemin="0" aria-valuemax="100">
+        <div class="fill" style="width: 40%;"></div>
+      </div>
+      <span id="batch-progress-percent">40%</span>
+    </div>
+
+    <ul id="batch-task-list">
+      <li class="batch-task--done"><span class="task-name">작업 1</span><span class="badge">완료</span></li>
+      <li class="batch-task--done"><span class="task-name">작업 2</span><span class="badge">완료</span></li>
+      <li class="batch-task--running"><span class="task-name">작업 3</span><span class="badge">실행</span></li>
+      <li class="batch-task--pending"><span class="task-name">작업 4</span><span class="badge">대기</span></li>
+      <li class="batch-task--pending"><span class="task-name">작업 5</span><span class="badge">대기</span></li>
+    </ul>
+  </div>
+
+  <!-- ── 컬러 팔레트 ────────────────────────────────────── -->
+  <p class="section-label">상태 컬러 팔레트 (design token)</p>
+  <div class="palette">
+    <div class="swatch"><span class="chip" style="background:var(--color-status-pending)"></span>대기 <code>--color-status-pending · #64748B</code></div>
+    <div class="swatch"><span class="chip" style="background:var(--color-status-running)"></span>실행 <code>--color-status-running · #2563EB</code></div>
+    <div class="swatch"><span class="chip" style="background:var(--color-status-done)"></span>완료 <code>--color-status-done · #16A34A</code></div>
+    <div class="swatch"><span class="chip" style="background:var(--color-status-cancelled)"></span>취소 <code>--color-status-cancelled · #D97706</code></div>
+    <div class="swatch"><span class="chip" style="background:var(--color-status-failed)"></span>실패 <code>--color-status-failed · #DC2626</code></div>
+  </div>
+
+  <!-- ── 상태 스냅샷: 초기 / 취소 / 실패 / 복원 후 ───────── -->
+  <p class="section-label">상태 스냅샷 — 5개 상태 & 복원 전후</p>
+  <div class="snapshot-grid">
+
+    <!-- 초기(대기) -->
+    <div class="snap-card">
+      <h3>① 초기 로드 (대기)</h3>
+      <p class="desc">전부 대기 · 0% · 시작 버튼 활성</p>
+      <div class="batch-progress__controls">
+        <button id="batch-progress-start" aria-label="배치 시작">시작</button>
+        <button id="batch-progress-reset" aria-label="배치 초기화">초기화</button>
+      </div>
+      <p class="batch-progress__status" aria-live="polite">
+        <span class="status-dot" style="background:var(--color-status-pending)"></span>대기
+      </p>
+      <div class="bar-row">
+        <div class="batch-progress__bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+          <div class="fill" style="width:0%;"></div>
+        </div>
+        <span>0%</span>
+      </div>
+      <ul id="batch-task-list">
+        <li class="batch-task--pending"><span class="task-name">작업 1</span><span class="badge">대기</span></li>
+        <li class="batch-task--pending"><span class="task-name">작업 2</span><span class="badge">대기</span></li>
+      </ul>
+    </div>
+
+    <!-- 완료 -->
+    <div class="snap-card">
+      <h3>② 완료</h3>
+      <p class="desc">전부 완료 · 100% · fill 완료색 전환</p>
+      <p class="batch-progress__status" aria-live="polite">
+        <span class="status-dot" style="background:var(--color-status-done)"></span>완료
+      </p>
+      <div class="bar-row">
+        <div class="batch-progress__bar" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+          <div class="fill" style="width:100%; background:var(--color-status-done);"></div>
+        </div>
+        <span>100%</span>
+      </div>
+      <ul id="batch-task-list">
+        <li class="batch-task--done"><span class="task-name">작업 1</span><span class="badge">완료</span></li>
+        <li class="batch-task--done"><span class="task-name">작업 2</span><span class="badge">완료</span></li>
+      </ul>
+    </div>
+
+    <!-- 취소 발생 -->
+    <div class="snap-card">
+      <h3>③ 취소 발생 (복원 직전)</h3>
+      <p class="desc">취소됨 반영 → 이후 ⑤로 초기화</p>
+      <p class="batch-progress__status" aria-live="polite">
+        <span class="status-dot" style="background:var(--color-status-cancelled)"></span>취소됨
+      </p>
+      <div class="bar-row">
+        <div class="batch-progress__bar" role="progressbar" aria-valuenow="20" aria-valuemin="0" aria-valuemax="100">
+          <div class="fill" style="width:20%; background:var(--color-status-cancelled);"></div>
+        </div>
+        <span>20%</span>
+      </div>
+      <ul id="batch-task-list">
+        <li class="batch-task--done"><span class="task-name">작업 1</span><span class="badge">완료</span></li>
+        <li class="batch-task--cancelled"><span class="task-name">작업 2</span><span class="badge">취소</span></li>
+      </ul>
+    </div>
+
+    <!-- 실패 발생 -->
+    <div class="snap-card">
+      <h3>④ 실패 발생 (복원 직전)</h3>
+      <p class="desc">실패 반영 → 이후 ⑤로 초기화</p>
+      <p class="batch-progress__status" aria-live="polite">
+        <span class="status-dot" style="background:var(--color-status-failed)"></span>실패
+      </p>
+      <div class="bar-row">
+        <div class="batch-progress__bar" role="progressbar" aria-valuenow="20" aria-valuemin="0" aria-valuemax="100">
+          <div class="fill" style="width:20%; background:var(--color-status-failed);"></div>
+        </div>
+        <span>20%</span>
+      </div>
+      <ul id="batch-task-list">
+        <li class="batch-task--done"><span class="task-name">작업 1</span><span class="badge">완료</span></li>
+        <li class="batch-task--failed"><span class="task-name">작업 2</span><span class="badge">실패</span></li>
+      </ul>
+    </div>
+
+    <!-- 복원 후 -->
+    <div class="snap-card">
+      <h3>⑤ 초기화·취소·실패 후 복원</h3>
+      <p class="desc">대기 · 0% · 시작 버튼 즉시 재활성화</p>
+      <div class="batch-progress__controls">
+        <button id="batch-progress-start" aria-label="배치 시작">시작</button>
+        <button id="batch-progress-reset" aria-label="배치 초기화">초기화</button>
+      </div>
+      <p class="batch-progress__status" aria-live="polite">
+        <span class="status-dot" style="background:var(--color-status-pending)"></span>대기
+      </p>
+      <div class="bar-row">
+        <div class="batch-progress__bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+          <div class="fill" style="width:0%;"></div>
+        </div>
+        <span>0%</span>
+      </div>
+      <ul id="batch-task-list">
+        <li class="batch-task--pending"><span class="task-name">작업 1</span><span class="badge">대기</span></li>
+        <li class="batch-task--pending"><span class="task-name">작업 2</span><span class="badge">대기</span></li>
+      </ul>
+    </div>
+
+  </div>
+
+</body>
+</html>
+</content>

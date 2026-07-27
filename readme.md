@@ -370,9 +370,14 @@ Accessibility and responsive contract:
   announced to screen readers.
 - Every control (enqueue / clear queue / pause / resume) has an explicit
   `aria-label` and is reachable in keyboard Tab order.
-- After cancelling (`clearQueue()`), pausing, or a failure, the display returns
-  to its initial values (`Idle` + zero counts) and the primary control stays
-  usable — the UI converges once the limiter becomes idle.
+- After cancelling (`clearQueue()`) or a task failure, pending calls are
+  discarded and any running task still settles; once the limiter drains, the
+  display converges to its initial values (`Idle` + zero counts) and the enqueue
+  control is usable again.
+- Pausing is different: while paused the badge stays `Paused` even after counts
+  reach zero — the paused state takes priority over the derived idle state — so
+  the display only leaves `Paused` after `resume()` (which re-promotes queued
+  calls up to the concurrency limit).
 - Below 480px, the controls stack vertically; no content overflows at ≥ 320px.
 
 The full visual specification — concrete colors, typography, layout, and the

@@ -270,9 +270,11 @@ system font stack 사용(외부 폰트 로드 0건):
 | clear 직후 | 2 | **0** | `Saturated`(active 유지) | **disabled**(pending 0) | **enabled** | pending만 제거, 실행 중 task는 불변 |
 | 실행 task 정산 완료 | 0 | 0 | **`Idle`** | disabled | **enabled** | **초기값 수렴 + 주 control 재활성**(§4.8) |
 
-> **핵심 후조건 시각화**: 취소·일시정지·실패 등 어떤 흐름을 거쳐도 최종적으로
-> limiter가 idle이 되면 UI는 `Idle` 배지 + 지표 전부 0 + enqueue 활성으로
-> **수렴**한다. mockup에 "복원(recovered) 상태" 섹션으로 명시한다.
+> **핵심 후조건 시각화**: 취소(`clearQueue`)·실패 흐름은 pending 제거 + 실행 중
+> task 정산 후 limiter가 idle이 되면 UI가 `Idle` 배지 + 지표 전부 0 + enqueue
+> 활성으로 **수렴**한다. 단 **일시정지는 예외** — `isPaused`가 §3.3 최우선순위라
+> 카운트가 0/0이어도 status는 `paused`로 유지되며, `resume()` 호출 전까지는
+> `Idle`로 전이하지 않는다. mockup에 "복원(recovered) 상태" 섹션으로 명시한다.
 
 ### 6.4 concurrency 변경 drain (AC-5) — 시각 참고
 `pLimit(1)`에 대기 task가 있을 때 `concurrency = 3`으로 올리면 CONCURRENCY

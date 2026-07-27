@@ -34,12 +34,19 @@ expectType<boolean>(limit.isIdle);
 
 expectType<boolean>(limit.isSaturated);
 
+expectType<void>(limit.pause());
+expectType<void>(limit.resume());
+expectType<boolean>(limit.isPaused);
+
 // LimitFunction should require a Promise-returning function
 const lf = limitFunction(async (_a: string) => 'ok', {concurrency: 1});
 expectType<Promise<string>>(lf('input'));
 expectType<Promise<void>>(lf.onIdle());
 expectType<boolean>(lf.isIdle);
 expectType<boolean>(lf.isSaturated);
+expectType<void>(lf.pause());
+expectType<void>(lf.resume());
+expectType<boolean>(lf.isPaused);
 expectType<number>(lf.clearQueue());
 expectType<number>(lf.clearQueue(new Error('reason')));
 

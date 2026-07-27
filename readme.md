@@ -220,6 +220,62 @@ console.log(limit.isSaturated);
 //=> true
 ```
 
+### limit.pause()
+
+Pause the limiter.
+
+Stops promoting pending tasks, so no queued task starts until `resume()` is called. Tasks that are already running are not affected and settle normally. Calling `pause()` while already paused is a no-op.
+
+Useful for backpressure — for example, pausing new work while an external system signals a rate limit, without cancelling in-flight requests.
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(2);
+
+for (const url of urls) {
+	limit(() => fetch(url));
+}
+
+// Stop starting new requests; in-flight ones keep going.
+limit.pause();
+```
+
+Note: `pause()` does not cancel running tasks. To discard queued-but-not-started tasks, use `clearQueue(reason)`.
+
+### limit.resume()
+
+Resume a paused limiter.
+
+Promotes pending tasks up to the current `concurrency` limit, restoring normal scheduling. Calling `resume()` while not paused is a no-op.
+
+```js
+// Later, once there is capacity again:
+limit.resume();
+```
+
+### limit.isPaused
+
+Type: `boolean`
+
+Whether the limiter is currently paused — `true` after `pause()` and before `resume()`.
+
+This is a read-only `O(1)` snapshot. While paused, running tasks still settle but no pending task starts, so a paused limiter with pending tasks is never idle.
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(2);
+
+console.log(limit.isPaused);
+//=> false
+
+limit.pause();
+
+console.log(limit.isPaused);
+//=> true
+```
+
 ### limitFunction(fn, options) <sup>named export</sup>
 
 Returns a function with limited concurrency.
@@ -266,7 +322,7 @@ Default: `false`
 Reject pending promises with an `AbortError` when `clearQueue()` is called.
 This is recommended if you await the returned promises, for example with `Promise.all`, so pending tasks do not remain unresolved after `clearQueue()`.
 
-The returned function also exposes the same control and observation surface as `limit`: `.activeCount`, `.pendingCount`, `.concurrency` (get/set), `.clearQueue()`, `.onIdle()`, `.isIdle`, and `.isSaturated`.
+The returned function also exposes the same control and observation surface as `limit`: `.activeCount`, `.pendingCount`, `.concurrency` (get/set), `.clearQueue()`, `.onIdle()`, `.isIdle`, `.isSaturated`, `.pause()`, `.resume()`, and `.isPaused`.
 
 ```js
 import {limitFunction} from 'p-limit';
@@ -299,7 +355,7 @@ See [recipes.md](recipes.md) for common use cases and patterns.
 
 ### How is this different from the [`p-queue`](https://github.com/sindresorhus/p-queue) package?
 
-This package is only about limiting the number of concurrent executions, while `p-queue` is a fully featured queue implementation with lots of different options, introspection, and ability to pause the queue.
+This package is only about limiting the number of concurrent executions (with basic controls such as `pause()`/`resume()` and introspection), while `p-queue` is a fully featured queue implementation with lots of different options, priorities, and scheduling.
 
 ## Related
 

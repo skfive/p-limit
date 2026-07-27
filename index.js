@@ -16,6 +16,11 @@ export default function pLimit(concurrency) {
 	const queue = new Queue();
 	let activeCount = 0;
 
+	// When paused, no queued task is promoted to running; already-running tasks
+	// settle normally. Starts `false` so consumers that never call `pause()` keep
+	// the exact previous scheduling behavior/timing (additive integrity).
+	let paused = false;
+
 	// Active `limit.map` lazy schedulers. On a concurrency change we notify them
 	// so a raised limit promotes additional draws (mirrors the queue promotion below).
 	const mapSchedulers = new Set();
@@ -44,8 +49,9 @@ export default function pLimit(concurrency) {
 	};
 
 	const resumeNext = () => {
-		// Process the next queued function if we're under the concurrency limit
-		if (activeCount < concurrency && queue.size > 0) {
+		// Process the next queued function if we're under the concurrency limit.
+		// While paused, promotion is suspended so no queued task starts.
+		if (!paused && activeCount < concurrency && queue.size > 0) {
 			activeCount++;
 			queue.dequeue().run();
 		}
@@ -206,7 +212,7 @@ export default function pLimit(concurrency) {
 		};
 
 		function schedule() {
-			if (settled || drawing || iteratorDone) {
+			if (settled || drawing || iteratorDone || paused) {
 				return;
 			}
 
@@ -278,6 +284,40 @@ export default function pLimit(concurrency) {
 			// after a concurrency change (an infinite limit is never saturated).
 			get: () => activeCount >= concurrency,
 		},
+		pause: {
+			value() {
+				// Idempotent: pausing while already paused is a no-op. Running tasks
+				// are untouched; only the promotion of queued tasks is suspended.
+				paused = true;
+			},
+		},
+		resume: {
+			value() {
+				if (!paused) {
+					return;
+				}
+
+				paused = false;
+
+				// Promote queued tasks up to the current concurrency, mirroring the
+				// concurrency setter's drain. `resumeNext()` still schedules the actual
+				// run() via a microtask, so execution context/timing is unchanged.
+				// eslint-disable-next-line no-unmodified-loop-condition
+				while (activeCount < concurrency && queue.size > 0) {
+					resumeNext();
+				}
+
+				// Re-wake lazy `limit.map()` draws that were held off while paused.
+				for (const schedule of mapSchedulers) {
+					schedule();
+				}
+			},
+		},
+		isPaused: {
+			// O(1) read of whether the limiter is paused: `true` after `pause()` and
+			// before `resume()`. Mirrors the `isIdle`/`isSaturated` introspection.
+			get: () => paused,
+		},
 		concurrency: {
 			get: () => concurrency,
 
@@ -286,8 +326,12 @@ export default function pLimit(concurrency) {
 				concurrency = newConcurrency;
 
 				queueMicrotask(() => {
+					// The `!paused` guard both honors a paused limiter (drain stays
+					// deferred until `resume()`) and prevents an infinite loop: while
+					// paused, `resumeNext()` is a no-op so `activeCount`/`queue.size`
+					// would never change inside this loop.
 					// eslint-disable-next-line no-unmodified-loop-condition
-					while (activeCount < concurrency && queue.size > 0) {
+					while (!paused && activeCount < concurrency && queue.size > 0) {
 						resumeNext();
 					}
 
@@ -345,6 +389,19 @@ export function limitFunction(function_, options) {
 		},
 		isSaturated: {
 			get: () => limit.isSaturated,
+		},
+		pause: {
+			value() {
+				limit.pause();
+			},
+		},
+		resume: {
+			value() {
+				limit.resume();
+			},
+		},
+		isPaused: {
+			get: () => limit.isPaused,
 		},
 		concurrency: {
 			get: () => limit.concurrency,

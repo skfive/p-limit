@@ -1,0 +1,198 @@
+/*
+ * pause/resume 대시보드 스타일 (F68F701A7A-65)
+ * frozen UI 계약(ui-contract@v1)의 design token 이름을 그대로 선언·사용한다.
+ * token 이름은 변경하지 않으며, 값은 designer 확정 hex로 정렬한다.
+ */
+
+:root {
+	/* 동결된 design token — 이름 고정, 값은 designer 확정 hex */
+	--color-status-running: #15803D;
+	--color-status-paused: #B45309;
+	--color-status-idle: #475569;
+	--space-control-gap: 0.75rem;
+	--font-size-counter: 1.5rem;
+
+	/* 데모 지역 토큰 */
+	--surface: #ffffff;
+	--surface-muted: #f6f8fa;
+	--border: #d0d7de;
+	--text: #1f2328;
+	--text-muted: #57606a;
+	--radius: 8px;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	padding: 1.5rem;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	color: var(--text);
+	background: var(--surface-muted);
+	line-height: 1.5;
+}
+
+.dashboard {
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 1.5rem;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+}
+
+.dashboard__title {
+	margin: 0 0 0.5rem;
+	font-size: 1.4rem;
+}
+
+.dashboard__desc {
+	margin: 0 0 1.25rem;
+	color: var(--text-muted);
+}
+
+.dashboard__controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-control-gap);
+	margin-bottom: 1.25rem;
+}
+
+.btn {
+	flex: 0 1 auto;
+	min-height: 44px;
+	padding: 0.5rem 1rem;
+	font-size: 1rem;
+	color: var(--text);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+	background: var(--surface-muted);
+}
+
+.btn:focus-visible {
+	outline: 2px solid var(--color-status-running);
+	outline-offset: 2px;
+}
+
+.btn:disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
+.btn--primary {
+	color: #ffffff;
+	background: var(--color-status-running);
+	border-color: var(--color-status-running);
+}
+
+.btn--primary:hover:not(:disabled) {
+	background: #166b2e;
+}
+
+.dashboard__status {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-control-gap);
+	justify-content: space-between;
+	margin-bottom: 1.25rem;
+}
+
+.status-badge {
+	display: inline-block;
+	padding: 0.35rem 0.85rem;
+	font-weight: 600;
+	color: #ffffff;
+	border-radius: 999px;
+}
+
+.status-badge--idle {
+	background: var(--color-status-idle);
+}
+
+.status-badge--running {
+	background: var(--color-status-running);
+}
+
+.status-badge--paused {
+	background: var(--color-status-paused);
+}
+
+.dashboard__counter {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+}
+
+.dashboard__counter-item {
+	color: var(--text-muted);
+	font-size: 0.95rem;
+}
+
+.dashboard__counter-item strong {
+	font-size: var(--font-size-counter);
+	color: var(--text);
+}
+
+.task-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.task-item {
+	padding: 0.5rem 0.75rem;
+	background: var(--surface-muted);
+	border: 1px solid var(--border);
+	border-left-width: 4px;
+	border-radius: var(--radius);
+	font-variant-numeric: tabular-nums;
+}
+
+.task-item[data-status="running"] {
+	border-left-color: var(--color-status-running);
+}
+
+.task-item[data-status="held"],
+.task-item[data-status="pending"] {
+	border-left-color: var(--color-status-idle);
+}
+
+.task-item[data-status="paused"] {
+	border-left-color: var(--color-status-paused);
+}
+
+.task-item[data-status="done"] {
+	border-left-color: var(--color-status-running);
+	color: var(--text-muted);
+}
+
+.task-item[data-status="failed"] {
+	border-left-color: #cf222e;
+	color: #cf222e;
+}
+
+/* 반응형: 320px 이상에서 overflow 없이 controls wrap */
+@media (max-width: 480px) {
+	body {
+		padding: 0.75rem;
+	}
+
+	.dashboard {
+		padding: 1rem;
+	}
+
+	.btn {
+		flex: 1 1 100%;
+	}
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>p-limit — pause/resume 대시보드</title>
+	<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+	<main id="dashboard-root" class="dashboard">
+		<header class="dashboard__header">
+			<h1 class="dashboard__title">p-limit pause/resume 대시보드</h1>
+			<p class="dashboard__desc">
+				작업을 추가하고 실행 흐름을 일시정지·재개하며 동시 실행 제어를 관찰하세요.
+				동시 실행 한도: <strong id="concurrency-value">3</strong>
+			</p>
+		</header>
+
+		<div class="dashboard__controls">
+			<button type="button" id="task-add" class="btn btn--primary">작업 추가</button>
+			<button type="button" id="task-pause" class="btn" aria-label="실행 일시정지 — 신규 작업 시작 중지">일시정지</button>
+			<button type="button" id="task-resume" class="btn" aria-label="실행 재개 — 대기 작업 이어서 시작">재개</button>
+		</div>
+
+		<div class="dashboard__status">
+			<p id="status-badge" class="status-badge status-badge--idle" role="status" aria-live="polite">대기 중</p>
+			<div class="dashboard__counter">
+				<span class="dashboard__counter-item">실행 중 <strong id="active-count">0</strong></span>
+				<span class="dashboard__counter-item">대기 <strong id="pending-count">0</strong></span>
+			</div>
+		</div>
+
+		<ul id="task-list" class="task-list" aria-label="작업 목록"></ul>
+
+		<noscript>이 데모는 브라우저 네이티브 ESM(<code>&lt;script type="module"&gt;</code>)으로 동작합니다. 최신 브라우저에서 열어주세요.</noscript>
+	</main>
+
+	<script type="module" src="./app.js"></script>
+</body>
+</html>

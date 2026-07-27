@@ -309,6 +309,175 @@ export default function pLimit(concurrency) {
 		schedule();
 	});
 
+	// Lazily consume an iterator (sync or async) with bounded concurrency,
+	// resolving to the first input value (by draw index) whose predicate is
+	// truthy, then stopping early. Unlike `mapAsyncIterable` (which drains fully),
+	// a confirmed lowest-matching index ends the draw: no further items are pulled
+	// and not-yet-started predicates never start. Predicates already in flight are
+	// allowed to settle so they never surface as unhandled rejections, and the
+	// iterator's `return()` is called once on early exit. A predicate rejection
+	// (before the call settles) is fatal, mirroring `map`/`filter`.
+	const findFirstMatch = (iterator, predicateFunction) => new Promise((resolve, reject) => {
+		const values = [];
+		const inFlightIndices = new Set();
+		let index = 0;
+		let inFlight = 0;
+		let iteratorDone = false;
+		let settled = false;
+		let drawing = false;
+		let matchIndex;
+
+		// Any in-flight predicate with a smaller index could still become the
+		// winner, so the result is only confirmed once none remain below `matchIndex`.
+		const hasInFlightBelow = threshold => {
+			for (const inFlightIndex of inFlightIndices) {
+				if (inFlightIndex < threshold) {
+					return true;
+				}
+			}
+
+			return false;
+		};
+
+		const finish = async (isReject, payload) => {
+			settled = true;
+			mapSchedulers.delete(schedule);
+
+			// Best-effort iterator cleanup on early exit — call `return()` exactly
+			// once if present and the iterator has not been exhausted, matching how
+			// `for await...of` releases resources on an early break.
+			if (!iteratorDone && typeof iterator.return === 'function') {
+				try {
+					await iterator.return();
+				} catch {}
+			}
+
+			if (isReject) {
+				reject(payload);
+			} else {
+				resolve(payload);
+			}
+
+			notifyIdle();
+		};
+
+		// Resolve as soon as the lowest matching index is confirmed (no smaller
+		// index still in flight), or resolve with `undefined` once the iterator is
+		// drained with nothing matched.
+		const tryComplete = () => {
+			if (settled) {
+				return;
+			}
+
+			if (matchIndex !== undefined && !hasInFlightBelow(matchIndex)) {
+				finish(false, values[matchIndex]);
+				return;
+			}
+
+			if (iteratorDone && inFlight === 0 && matchIndex === undefined) {
+				finish(false, undefined);
+				return;
+			}
+
+			schedule();
+		};
+
+		// Run one predicate through the existing scheduling path so `active <=
+		// concurrency` stays enforced by the limiter itself (no duplicate scheduling).
+		const runTask = async (value, currentIndex) => {
+			try {
+				const verdict = await generator(predicateFunction, value, currentIndex);
+
+				inFlightIndices.delete(currentIndex);
+				inFlight--;
+
+				if (settled) {
+					return;
+				}
+
+				// Lower `matchIndex` toward the smallest truthy index seen so far;
+				// completion order never changes the winner (INV-1).
+				if (verdict && (matchIndex === undefined || currentIndex < matchIndex)) {
+					matchIndex = currentIndex;
+				}
+
+				tryComplete();
+			} catch (error) {
+				inFlightIndices.delete(currentIndex);
+				inFlight--;
+
+				// A predicate rejection is fatal before the call settles (like `map`/
+				// `filter`, unlike `mapSettled`); after it settles, the rejection is
+				// swallowed here so it never becomes an unhandled rejection (INV-3/5).
+				if (!settled) {
+					finish(true, error);
+				}
+			}
+		};
+
+		const drawOne = async () => {
+			drawing = true;
+			const currentIndex = index++;
+
+			let result;
+			try {
+				result = await iterator.next();
+			} catch (error) {
+				drawing = false;
+
+				if (!settled) {
+					iteratorDone = true;
+					finish(true, error);
+				}
+
+				return;
+			}
+
+			drawing = false;
+
+			// A match may have been confirmed (or the call otherwise settled) while
+			// we awaited `next()`. This value was consumed but can no longer win
+			// (its index is the largest drawn), so drop it.
+			if (settled || matchIndex !== undefined) {
+				return;
+			}
+
+			if (result.done) {
+				iteratorDone = true;
+
+				if (inFlight === 0) {
+					finish(false, undefined);
+				}
+
+				return;
+			}
+
+			inFlight++;
+			inFlightIndices.add(currentIndex);
+			values[currentIndex] = result.value;
+			runTask(result.value, currentIndex);
+
+			// A slot may still be free — try to fill it.
+			schedule();
+		};
+
+		function schedule() {
+			// No new draws once the result is settled, the iterator is exhausted, the
+			// limiter is paused, a draw is already awaiting `next()`, or a match has
+			// been confirmed (every future index is larger than `matchIndex`).
+			if (settled || drawing || iteratorDone || paused || matchIndex !== undefined) {
+				return;
+			}
+
+			if (inFlight < concurrency) {
+				drawOne();
+			}
+		}
+
+		mapSchedulers.add(schedule);
+		schedule();
+	});
+
 	Object.defineProperties(generator, {
 		activeCount: {
 			get: () => activeCount,
@@ -511,6 +680,24 @@ export default function pLimit(concurrency) {
 				return values.filter((value, index) => verdicts[index]);
 			},
 		},
+		find: {
+			async value(iterable, predicateFunction) {
+				// Resolve to the first input item (by draw index) whose predicate is
+				// truthy, matching `Array.prototype.find`, or `undefined` when nothing
+				// matches. Unlike `map`/`filter`/`mapSettled` (which consume the whole
+				// input), `find` stops early: once the lowest matching index is
+				// confirmed, no further items are drawn. Both sync and async iterables
+				// use the single lazy bounded draw loop so early termination is
+				// observable either way (INV-4) — `find` is new, so no legacy sync
+				// eager timing needs preserving. Each predicate runs through
+				// `generator`, so `active <= concurrency` stays enforced (INV-6).
+				const iterator = typeof iterable[Symbol.asyncIterator] === 'function'
+					? iterable[Symbol.asyncIterator]()
+					: iterable[Symbol.iterator]();
+
+				return findFirstMatch(iterator, predicateFunction);
+			},
+		},
 		subscribe: {
 			value(listener) {
 				if (typeof listener !== 'function') {
@@ -598,6 +785,14 @@ export function limitFunction(function_, options) {
 				// method, not `Array#filter`; the disable silences that misdetection.)
 				// eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
 				return limit.filter(iterable, predicateFunction);
+			},
+		},
+		find: {
+			value(iterable, predicateFunction) {
+				// Delegate to the underlying limiter's `find` — no scheduling or
+				// early-termination logic is duplicated here.
+				// eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
+				return limit.find(iterable, predicateFunction);
 			},
 		},
 		subscribe: {

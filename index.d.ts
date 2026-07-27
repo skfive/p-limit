@@ -118,6 +118,28 @@ export type LimitFunction = {
 	) => Promise<Input[]>;
 
 	/**
+	Process an iterable or async iterable of inputs with limited concurrency, resolving to the first input item (in input/draw order) whose predicate resolves truthy.
+
+	The predicate function receives the item value and its index, and may be synchronous or asynchronous. An item matches when the predicate's return value (awaited if a promise) is truthy, matching `Array.prototype.find`.
+
+	The resolved value is the original input item (not the predicate's boolean), chosen by the lowest input index — independent of the order in which predicates complete. Resolves to `undefined` when no item matches.
+
+	Once the first-matching index is confirmed, no further items are drawn from the iterable and predicates that have not started are never started. Predicates already in flight are allowed to settle so they never surface as unhandled rejections; for an async iterable the iterator's `return()` is called once for cleanup.
+
+	Like {@link LimitFunction.map}/{@link LimitFunction.filter} (and unlike {@link LimitFunction.mapSettled}), a predicate rejection is fatal before the call settles: it rejects the returned promise with that reason and stops drawing new items.
+
+	Async iterables are consumed lazily: the next value is only pulled when a concurrency slot frees up, so at most `concurrency` items are drawn but not yet settled at any time. This makes it safe to pass infinite or streaming async iterables.
+
+	@param iterable - An iterable or async iterable containing an argument for the given predicate.
+	@param predicateFunction - Predicate function returning a boolean (or a promise for one).
+	@returns A promise resolving to the first matching input item, or `undefined`.
+	*/
+	find: <Input> (
+		iterable: Iterable<Input> | AsyncIterable<Input>,
+		predicateFunction: (input: Input, index: number) => PromiseLike<boolean> | boolean
+	) => Promise<Input | undefined>;
+
+	/**
 	Returns a promise that resolves when the limiter becomes idle — no promises are currently running and none are waiting to run.
 
 	If the limiter is already idle when this is called, the returned promise resolves immediately.
@@ -310,6 +332,28 @@ export type LimitedFunction<Arguments extends unknown[], ReturnType> = {
 		iterable: Iterable<Input> | AsyncIterable<Input>,
 		predicateFunction: (input: Input, index: number) => PromiseLike<boolean> | boolean
 	) => Promise<Input[]>;
+
+	/**
+	Process an iterable or async iterable of inputs with limited concurrency, resolving to the first input item (in input/draw order) whose predicate resolves truthy.
+
+	The predicate function receives the item value and its index, and may be synchronous or asynchronous. An item matches when the predicate's return value (awaited if a promise) is truthy, matching `Array.prototype.find`.
+
+	The resolved value is the original input item (not the predicate's boolean), chosen by the lowest input index — independent of the order in which predicates complete. Resolves to `undefined` when no item matches.
+
+	Once the first-matching index is confirmed, no further items are drawn from the iterable and predicates that have not started are never started. Predicates already in flight are allowed to settle so they never surface as unhandled rejections; for an async iterable the iterator's `return()` is called once for cleanup. Delegates to the underlying limiter.
+
+	Like `map` (and unlike `mapSettled`), a predicate rejection is fatal before the call settles: it rejects the returned promise with that reason and stops drawing new items.
+
+	Async iterables are consumed lazily: the next value is only pulled when a concurrency slot frees up, so at most `concurrency` items are drawn but not yet settled at any time. This makes it safe to pass infinite or streaming async iterables.
+
+	@param iterable - An iterable or async iterable containing an argument for the given predicate.
+	@param predicateFunction - Predicate function returning a boolean (or a promise for one).
+	@returns A promise resolving to the first matching input item, or `undefined`.
+	*/
+	find: <Input> (
+		iterable: Iterable<Input> | AsyncIterable<Input>,
+		predicateFunction: (input: Input, index: number) => PromiseLike<boolean> | boolean
+	) => Promise<Input | undefined>;
 
 	/**
 	Returns a promise that resolves when the limiter becomes idle — no promises are currently running and none are waiting to run.

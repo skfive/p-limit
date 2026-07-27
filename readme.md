@@ -158,6 +158,30 @@ const reachable = await limit.filter(urls, async url => (await fetch(url, {metho
 
 This is a convenience function for processing inputs that arrive in batches. For more complex use cases, see [p-filter](https://github.com/sindresorhus/p-filter).
 
+### limit.find(iterable, predicateFunction)
+
+Process an iterable or async iterable of inputs with limited concurrency, resolving to the first input item whose predicate resolves truthy.
+
+The predicate function receives the item value and its index, and may be synchronous or asynchronous. An item matches when the predicate's return value (awaited if it is a promise) is truthy, matching [`Array.prototype.find()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/find).
+
+Returns a promise that resolves to the original input item (not the predicate's boolean), chosen by the **lowest input (draw) index**, regardless of the order in which the predicates complete. Resolves to `undefined` when no item matches.
+
+Unlike [`limit.map()`](#limitmapiterable-mapperfunction)/[`limit.filter()`](#limitfilteriterable-predicatefunction) (which consume the whole input), `find` stops early: once the first-matching index is confirmed, no further items are drawn from the iterable and predicates that have not started are never started. Predicates already in flight are allowed to settle so they never surface as unhandled rejections; for an async iterable the iterator's `return()` is called once for cleanup.
+
+Like [`limit.map()`](#limitmapiterable-mapperfunction) (and unlike [`limit.mapSettled()`](#limitmapsettlediterable-mapperfunction)), a predicate rejection is fatal: it rejects the returned promise with that reason and stops drawing new items.
+
+Both sync and async iterables are consumed lazily: the next value is only pulled once a concurrency slot frees up, so at most `concurrency` items are drawn but not yet settled at any time. This makes it safe to pass infinite or streaming async iterables, and lets the early exit skip items after the match.
+
+```js
+import pLimit from 'p-limit';
+
+const limit = pLimit(2);
+
+// Resolve to the first URL that responds OK; at most two HEAD requests run at a
+// time, and no further requests are made once a match is confirmed.
+const firstReachable = await limit.find(urls, async url => (await fetch(url, {method: 'HEAD'})).ok);
+```
+
 ### limit.activeCount
 
 The number of promises that are currently running.

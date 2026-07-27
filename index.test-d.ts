@@ -99,3 +99,29 @@ expectType<Promise<number[]>>(limitedForFilter.filter([1, 2, 3], async n => n > 
 
 // [T9] a predicate returning a non-boolean is a type error
 expectError(limit.filter([1, 2, 3], async n => n));
+
+// [T10] LimitFunction.find resolves to the original element type or undefined, from sync/async iterables
+expectType<Promise<number | undefined>>(limit.find([1, 2, 3], async n => n > 1));
+expectType<Promise<string | undefined>>(limit.find(new Set(['a', 'b']), value => value !== 'a'));
+expectType<Promise<number | undefined>>(limit.find([1, 2, 3].values(), n => n > 1));
+
+// [T11] find accepts an async iterable with the same element return type
+expectType<Promise<number | undefined>>(limit.find(asyncSource(), async n => n > 0));
+
+// [T12] find accepts both sync and async (PromiseLike<boolean>) predicates
+expectType<Promise<number | undefined>>(limit.find([1, 2, 3], n => n > 1));
+
+// [T13] the predicate's `value`/`index` parameters are inferred as the element type and `number`
+const foundWithIndex = limit.find(['a', 'b'], async (value, index) => {
+	expectType<string>(value);
+	expectType<number>(index);
+	return index > 0;
+});
+expectType<Promise<string | undefined>>(foundWithIndex);
+
+// [T14] limitFunction() returns a find delegating with the same typing
+const limitedForFind = limitFunction(async (n: number) => n, {concurrency: 1});
+expectType<Promise<number | undefined>>(limitedForFind.find([1, 2, 3], async n => n > 1));
+
+// [T15] a predicate returning a non-boolean is a type error
+expectError(limit.find([1, 2, 3], async n => n));

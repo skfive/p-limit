@@ -2378,3 +2378,401 @@ test('[F18] limitFunction() exposes filter delegating to the underlying limiter'
 
 	t.deepEqual(results, [1, 3, 5]);
 });
+
+// `limit.find` mirrors `Array.prototype.find`: it resolves to the first original
+// item (by input/draw index) whose predicate resolves truthy, or `undefined` when
+// nothing matches. Unlike `map`/`filter`/`mapSettled` (which consume the whole
+// input), `find` stops early once the lowest matching index is confirmed: no
+// further items are drawn and not-yet-started predicates never start. Predicates
+// already in flight are allowed to settle so they never surface as unhandled
+// rejections; for an async iterable the iterator's `return()` is called once. Like
+// `map`/`filter` (and unlike `mapSettled`), a predicate rejection is fatal before
+// the call settles. (INV-1..9 of the execution blueprint.)
+
+test('[FIND1] find resolves to the first matching item (sync iterable)', async t => {
+	const limit = pLimit(2);
+
+	const result = await limit.find([1, 2, 3, 4], async n => n % 2 === 0);
+
+	t.is(result, 2);
+});
+
+test('[FIND2] find returns the lowest input index even when a later index resolves truthy first (INV-1)', async t => {
+	const limit = pLimit(2);
+
+	// Index 0 (`a`) is slow-truthy, index 1 (`b`) is fast-truthy. The lowest input
+	// index must win regardless of completion order.
+	const result = await limit.find(['a', 'b'], async (_value, index) => {
+		await delay(index === 0 ? 40 : 5);
+		return true;
+	});
+
+	t.is(result, 'a');
+});
+
+test('[FIND3] find resolves to undefined when nothing matches (INV-9)', async t => {
+	const limit = pLimit(2);
+
+	const result = await limit.find([1, 2, 3], async () => false);
+
+	t.is(result, undefined);
+});
+
+test('[FIND4] find resolves to undefined for an empty iterable and never calls the predicate (INV-9)', async t => {
+	const limit = pLimit(2);
+	let called = 0;
+
+	const result = await limit.find([], async () => {
+		called++;
+		return true;
+	});
+
+	t.is(result, undefined);
+	t.is(called, 0);
+});
+
+test('[FIND5] find uses JavaScript truthiness, not strict booleans (INV-9)', async t => {
+	const limit = pLimit(1);
+	const inputs = ['a', 'b', 'c'];
+
+	// First two verdicts are falsy (0, ''), the third is a truthy non-boolean.
+	const verdicts = [0, '', 'yes'];
+
+	// eslint-disable-next-line unicorn/no-array-method-this-argument
+	const result = await limit.find(inputs, async (_value, index) => verdicts[index]);
+
+	t.is(result, 'c');
+});
+
+test('[FIND6] find passes a 0-based draw index to the predicate (INV-9)', async t => {
+	const limit = pLimit(1);
+	const seen = [];
+
+	// Concurrency 1 keeps the falsy draws strictly in input order.
+	const result = await limit.find(['a', 'b', 'c'], async (_value, index) => {
+		seen.push(index);
+		return false;
+	});
+
+	t.is(result, undefined);
+	t.deepEqual(seen, [0, 1, 2]);
+});
+
+test('[FIND7] find lazily consumes a sync iterable and stops drawing past the match (INV-4)', async t => {
+	const limit = pLimit(1);
+	let drawn = 0;
+
+	function * source() {
+		for (const value of [1, 2, 3, 4, 5]) {
+			drawn++;
+			yield value;
+		}
+	}
+
+	const result = await limit.find(source(), async n => n === 2);
+
+	t.is(result, 2);
+	// Only 1 and 2 are pulled; 3/4/5 are never drawn from the generator.
+	t.is(drawn, 2);
+});
+
+test('[FIND8] find stops drawing an async iterable past the match (INV-2)', async t => {
+	const limit = pLimit(1);
+	let drawn = 0;
+
+	async function * source() {
+		for (const value of [1, 2, 3, 4, 5, 6, 7, 8]) {
+			drawn++;
+			yield value;
+		}
+	}
+
+	const result = await limit.find(source(), async n => n === 3);
+
+	t.is(result, 3);
+	t.is(drawn, 3);
+});
+
+test('[FIND9] find resolves for an infinite async iterable without hanging (INV-2)', async t => {
+	const limit = pLimit(2);
+
+	async function * naturals() {
+		let n = 0;
+		while (true) {
+			yield n++;
+		}
+	}
+
+	const result = await limit.find(naturals(), async n => n === 5);
+
+	t.is(result, 5);
+});
+
+test('[FIND10] find lets an already-started predicate settle without an unhandled rejection after an earlier match wins (INV-3)', async t => {
+	const limit = pLimit(3);
+
+	await t.notThrowsAsync(async () => {
+		const result = await limit.find([0, 1, 2], async (_value, index) => {
+			if (index === 0) {
+				return true; // Fast truthy — confirms match at index 0.
+			}
+
+			await delay(20);
+			throw new Error(`late boom ${index}`); // Rejects after the call settled.
+		});
+
+		t.is(result, 0);
+	});
+
+	// Flush past the in-flight predicates' rejections: if they were not swallowed
+	// they would surface as unhandled rejections and fail the run.
+	await delay(50);
+});
+
+test('[FIND11] find rejects when a sync-iterable predicate rejects (fail-fast, unlike mapSettled) (INV-5)', async t => {
+	const limit = pLimit(2);
+	const error = new Error('predicate boom');
+
+	await t.throwsAsync(limit.find([1, 2, 3], async n => {
+		if (n === 1) {
+			throw error;
+		}
+
+		return false;
+	}), {is: error});
+});
+
+test('[FIND12] find rejects when the predicate throws and calls the async iterator return() once (INV-5)', async t => {
+	const limit = pLimit(2);
+	let returnCalls = 0;
+	const error = new Error('async predicate boom');
+
+	const iterable = {
+		[Symbol.asyncIterator]() {
+			let value = 0;
+			return {
+				async next() {
+					return value < 5 ? {value: value++, done: false} : {value: undefined, done: true};
+				},
+				async return() {
+					returnCalls++;
+					return {value: undefined, done: true};
+				},
+			};
+		},
+	};
+
+	// eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
+	await t.throwsAsync(limit.find(iterable, async value => {
+		if (value === 1) {
+			throw error;
+		}
+
+		await delay(50);
+		return false;
+	}), {is: error});
+
+	t.is(returnCalls, 1);
+});
+
+test('[FIND13] find rejects when the async iterator itself rejects (INV-5)', async t => {
+	const limit = pLimit(2);
+	const error = new Error('iterator boom');
+
+	const iterable = {
+		[Symbol.asyncIterator]() {
+			let value = 0;
+			return {
+				async next() {
+					if (value === 2) {
+						throw error;
+					}
+
+					return {value: value++, done: false};
+				},
+			};
+		},
+	};
+
+	// eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
+	await t.throwsAsync(limit.find(iterable, async () => {
+		await delay(10);
+		return false;
+	}), {is: error});
+});
+
+test('[FIND14] find never runs more predicates than the concurrency limit (INV-6)', async t => {
+	const limit = pLimit(2);
+	let running = 0;
+	let maxRunning = 0;
+
+	const result = await limit.find([1, 2, 3, 4, 5, 6], async n => {
+		running++;
+		maxRunning = Math.max(maxRunning, running);
+		await delay(10);
+		running--;
+		return n === 6;
+	});
+
+	t.is(result, 6);
+	t.true(maxRunning <= 2);
+});
+
+test('[FIND15] find keeps the lowest matching index for an async iterable despite shuffled completion (INV-1)', async t => {
+	const limit = pLimit(3);
+
+	async function * source() {
+		yield * ['a', 'b', 'c', 'd'];
+	}
+
+	// Both `b` (index 1) and `c` (index 2) match, and `c` completes first, but the
+	// lower index `b` must win.
+	const result = await limit.find(source(), async (value, index) => {
+		await delay((4 - index) * 10);
+		return value === 'b' || value === 'c';
+	});
+
+	t.is(result, 'b');
+});
+
+test('[FIND16] find holds off new async draws while paused and completes after resume (INV-7)', async t => {
+	const limit = pLimit(1);
+	let drawn = 0;
+
+	async function * source() {
+		for (const value of [0, 1, 2, 3]) {
+			drawn++;
+			yield value;
+		}
+	}
+
+	const found = limit.find(source(), async value => {
+		await delay(15);
+		return value === 2;
+	});
+
+	// Let the first draw start, then pause before the rest are drawn.
+	await delay(5);
+	limit.pause();
+	const drawnAtPause = drawn;
+
+	await delay(40);
+	// No new draws happened while paused.
+	t.is(drawn, drawnAtPause);
+
+	limit.resume();
+	const result = await found;
+
+	t.is(result, 2);
+});
+
+test('[FIND17] find resolves while paused when a running predicate already confirms the match (INV-7)', async t => {
+	const limit = pLimit(1);
+
+	const found = limit.find([10, 20, 30], async value => {
+		await delay(20);
+		return value === 10;
+	});
+
+	// Pause after the first predicate has started running.
+	await delay(5);
+	limit.pause();
+
+	const result = await found;
+
+	t.is(result, 10);
+	t.true(limit.isPaused);
+});
+
+test('[FIND18] find rejects when a pending predicate is rejected by clearQueue(reason) (INV-8)', async t => {
+	const limit = pLimit(1);
+	const error = new Error('cleared');
+
+	// Occupy the single slot so the find predicate cannot be promoted and sits
+	// pending in the queue, where clearQueue can reject it.
+	const blocker = limit(() => delay(100));
+
+	const found = limit.find([1, 2, 3], async n => n === 1);
+
+	await delay(10);
+	const removed = limit.clearQueue(error);
+
+	await t.throwsAsync(found, {is: error});
+	t.is(removed, 1);
+
+	await blocker;
+});
+
+test('[FIND19] find rejects with an AbortError when rejectOnClear clears a pending predicate (INV-8)', async t => {
+	const limit = pLimit({concurrency: 1, rejectOnClear: true});
+
+	const blocker = limit(() => delay(100));
+
+	const found = limit.find([1, 2, 3], async n => n === 1);
+
+	await delay(10);
+	limit.clearQueue();
+
+	await t.throwsAsync(found, {name: 'AbortError'});
+
+	await blocker;
+});
+
+test('[FIND20] limitFunction() exposes find delegating to the underlying limiter', async t => {
+	const limitedFunction = limitFunction(async n => n, {concurrency: 2});
+
+	const result = await limitedFunction.find([1, 2, 3, 4, 5], async n => n > 3);
+
+	t.is(result, 4);
+});
+
+test('[FIND21] find keeps the limiter non-idle until it settles, then onIdle resolves (INV-2)', async t => {
+	const limit = pLimit(1);
+
+	async function * source() {
+		yield * [0, 1, 2, 3];
+	}
+
+	const found = limit.find(source(), async _value => {
+		await delay(15);
+		return false;
+	});
+
+	t.false(limit.isIdle);
+
+	const idle = limit.onIdle();
+	// While the lazy find is still drawing, the limiter must stay non-idle.
+	t.true(await isStillPending(idle, 40));
+
+	await found;
+	await idle;
+	t.true(limit.isIdle);
+	t.is(limit.activeCount, 0);
+});
+
+test('[FIND22] find raises in-flight async draws when concurrency increases mid-flight (INV-6)', async t => {
+	const limit = pLimit(1);
+	let inFlight = 0;
+	let inFlightMax = 0;
+
+	async function * source() {
+		yield * [0, 1, 2, 3, 4, 5, 6, 7];
+	}
+
+	const promise = limit.find(source(), async value => {
+		inFlight++;
+		inFlightMax = Math.max(inFlightMax, inFlight);
+		await delay(30);
+		inFlight--;
+		return value === 7;
+	});
+
+	await delay(10);
+	t.is(inFlight, 1);
+
+	limit.concurrency = 3;
+
+	const result = await promise;
+	t.is(result, 7);
+	t.is(inFlightMax, 3);
+});

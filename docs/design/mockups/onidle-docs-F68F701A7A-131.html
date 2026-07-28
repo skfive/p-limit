@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>limit.onIdle() — README 정보구조 mockup (F68F701A7A-131)</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f6f8fa;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-muted: #59636e;
+    --accent: #0969da;
+    --code: #0550ae;
+    --ok: #1a7f37;
+    --warn: #9a6700;
+    --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .doc {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 24px 72px;
+  }
+  .doc-note {
+    background: #fff8c5;
+    border: 1px solid #d4a72c66;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 28px;
+  }
+  h1 { font-size: 28px; font-weight: 600; line-height: 1.25; margin: 0 0 4px; }
+  h2 {
+    font-size: 20px; font-weight: 600; line-height: 1.25;
+    margin: 36px 0 12px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 16px; font-weight: 600; line-height: 1.3;
+    margin: 24px 0 8px;
+    font-family: var(--font-mono);
+  }
+  p { margin: 12px 0; }
+  em { font-style: italic; }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--code);
+  }
+  a { color: var(--accent); text-decoration: none; }
+  .caption { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 14px 0;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+  .tok-com { color: var(--text-muted); }
+  .tok-key { color: #cf222e; }
+  .tok-str { color: #0a3069; }
+  .tok-fn  { color: #8250df; }
+
+  .noteblock {
+    border-left: 3px solid var(--border);
+    padding: 4px 0 4px 14px;
+    margin: 14px 0;
+    color: var(--text-muted);
+    font-size: 15px;
+  }
+
+  /* placement strip: API list position */
+  .apilist {
+    list-style: none;
+    margin: 12px 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+  }
+  .apilist li { padding: 7px 14px; border-top: 1px solid var(--border); }
+  .apilist li:first-child { border-top: none; }
+  .apilist li.here {
+    background: #ddf4ff;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .apilist li.muted { color: var(--text-muted); }
+
+  /* transition timeline — text labels are primary, color is secondary */
+  .timeline {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 16px 0;
+    overflow: hidden;
+  }
+  .timeline .row {
+    display: grid;
+    grid-template-columns: 92px 1fr;
+    border-top: 1px solid var(--border);
+  }
+  .timeline .row:first-child { border-top: none; }
+  .timeline .t {
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--text-muted);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+  }
+  .timeline .ev { padding: 8px 12px; font-size: 14px; }
+  .marker {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 7px;
+    margin-right: 8px;
+  }
+  .marker[data-kind="resolve"] { color: var(--ok);   border-color: #1a7f3766; }
+  .marker[data-kind="reject"]  { color: var(--warn); border-color: #9a670066; }
+  .marker[data-kind="pending"] { color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-note">
+    문서 미리보기 mockup — 실제 README 는 GitHub 마크다운이 렌더합니다. 정본 문구는
+    <code>docs/design/onidle-docs-F68F701A7A-131.md</code> 의 §5·§6 영어 블록입니다.
+    이 mockup 은 문단 순서·예시·전이 타임라인을 <b>색 없이 텍스트 라벨만으로</b> 확인하기 위한 것입니다.
+  </div>
+
+  <h1>limit.onIdle()</h1>
+  <p class="caption">README 정보구조 mockup · F68F701A7A-131 · frozen 계약 F68F701A7A-130 정합</p>
+
+  <h2>API 목록 내 배치 (고정)</h2>
+  <p>idle 을 <em>await</em> 하는 <code>onIdle()</code> 은 동기 스냅샷 <code>isIdle</code> 바로 앞에 둔다.
+  <code>isIdle</code> 절이 "the same idle state that <code>onIdle()</code> waits for" 로 역참조하므로 인접이 필수.</p>
+  <ul class="apilist">
+    <li class="muted">### limit.usePreset(name)</li>
+    <li class="here">### limit.onIdle()</li>
+    <li class="muted">### limit.isIdle</li>
+    <li class="muted">### limit.isSaturated</li>
+  </ul>
+
+  <h2>렌더 미리보기 — onIdle 절</h2>
+
+  <p>Returns a promise that resolves when the limiter becomes idle — no promises are
+  currently running (<code>activeCount === 0</code>) and none are waiting to run
+  (<code>pendingCount === 0</code>).</p>
+
+  <p>If the limiter is already idle when this is called, the returned promise resolves
+  immediately.</p>
+
+  <p>This is event-driven (no polling or timers). It waits for the exact same idle state
+  that <code>limit.isIdle</code> reports, so it also accounts for pending tasks discarded
+  by <code>clearQueue()</code> and for in-progress <code>limit.map()</code>,
+  <code>limit.filter()</code>, and <code>limit.find()</code> calls.</p>
+
+  <p>The returned promise <b>never rejects</b>. "Idle" means <em>no task is running or
+  queued</em> — not that every task succeeded. If a task rejects, it still settles the
+  limiter toward idle and its rejection is delivered to that task's own promise, never to
+  <code>onIdle()</code>. Clearing the queue counts as reaching idle too: after
+  <code>clearQueue()</code> (even with <code>rejectOnClear</code>), <code>onIdle()</code>
+  resolves while the discarded tasks reject on their own promises. You never need to wrap
+  <code>await limit.onIdle()</code> in try/catch.</p>
+
+  <p>Each call returns a fresh promise for the <em>next</em> time the limiter reaches idle,
+  so calling it repeatedly is safe and cheap. Multiple concurrent awaiters all resolve
+  together at the same idle moment, and a promise resolved for one idle cycle is never
+  re-fired by a later one.</p>
+
+  <pre><code><span class="tok-key">import</span> pLimit <span class="tok-key">from</span> <span class="tok-str">'p-limit'</span>;
+
+<span class="tok-key">const</span> limit = <span class="tok-fn">pLimit</span>(<span class="tok-str">2</span>);
+
+<span class="tok-key">for</span> (<span class="tok-key">const</span> url <span class="tok-key">of</span> urls) {
+	<span class="tok-fn">limit</span>(() => <span class="tok-fn">fetch</span>(url));
+}
+
+<span class="tok-com">// Resolves once every queued and running task has settled.</span>
+<span class="tok-key">await</span> limit.<span class="tok-fn">onIdle</span>();
+console.<span class="tok-fn">log</span>(<span class="tok-str">'All done'</span>);</code></pre>
+
+  <p>Pausing does not by itself keep the promise pending: a paused limiter with nothing
+  running and nothing queued is idle, so <code>onIdle()</code> resolves right away. If
+  tasks are still queued, it stays pending until they drain after <code>resume()</code> or
+  are removed by <code>clearQueue()</code>.</p>
+
+  <div class="noteblock">
+    Note: If a running task never settles, the limiter never becomes idle and the returned
+    promise never resolves — the same caveat as awaiting the task promises directly.
+  </div>
+
+  <p><code>limitFunction</code> delegates <code>onIdle()</code> to its underlying limiter,
+  so it exposes the exact same behavior:</p>
+
+  <pre><code><span class="tok-key">import</span> {limitFunction} <span class="tok-key">from</span> <span class="tok-str">'p-limit'</span>;
+
+<span class="tok-key">const</span> run = <span class="tok-fn">limitFunction</span>(<span class="tok-key">async</span> url => <span class="tok-fn">fetch</span>(url), {concurrency: <span class="tok-str">2</span>});
+
+<span class="tok-key">for</span> (<span class="tok-key">const</span> url <span class="tok-key">of</span> urls) {
+	<span class="tok-fn">run</span>(url);
+}
+
+<span class="tok-key">await</span> run.<span class="tok-fn">onIdle</span>();
+console.<span class="tok-fn">log</span>(<span class="tok-str">'All done'</span>);</code></pre>
+
+  <h2>전이 타임라인 — 언제 resolve/reject 되는가 (색 보조, 라벨이 주)</h2>
+  <p class="caption">한 리미터에서 마지막 작업이 reject 로 끝나는 시나리오. onIdle 은 여전히 resolve 되고,
+  task 의 rejection 은 <b>별개 promise</b> 로 전파된다(계약 §3.4 / E6).</p>
+  <div class="timeline">
+    <div class="row">
+      <div class="t">t0</div>
+      <div class="ev"><span class="marker" data-kind="pending">pending</span> two tasks running, <code>onIdle()</code> called → promise pending</div>
+    </div>
+    <div class="row">
+      <div class="t">t1</div>
+      <div class="ev"><span class="marker" data-kind="resolve">settle</span> task A fulfills → <code>activeCount</code> 2→1, still not idle</div>
+    </div>
+    <div class="row">
+      <div class="t">t2</div>
+      <div class="ev"><span class="marker" data-kind="reject">task rejects (separate)</span> task B rejects → its own promise rejects</div>
+    </div>
+    <div class="row">
+      <div class="t">t2</div>
+      <div class="ev"><span class="marker" data-kind="resolve">resolve</span> same tick: <code>activeCount</code> 1→0, queue empty → <code>onIdle()</code> <b>resolves</b> (no throw)</div>
+    </div>
+  </div>
+
+  <p class="caption">색상 의존 없음: 각 마커는 라벨 문자열(<code>resolve</code> / <code>task rejects (separate)</code> /
+  <code>pending</code>)로 구분되며 색은 보조 표기다.</p>
+</div>
+</body>
+</html>

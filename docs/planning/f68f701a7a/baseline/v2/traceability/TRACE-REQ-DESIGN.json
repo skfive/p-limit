@@ -1,0 +1,1 @@
+{"artifactId":"TRACE-REQ-DESIGN","artifactType":"TraceLink","relation":"realized_by","revision":1,"schemaVersion":"trace-link-v1","sourceRef":"REQ-P-LIMIT-CORE","status":"active","targetRef":"ARCH-P-LIMIT","title":"Requirement to architecture","writer":{"actorId":"01KYBSQX2BWJ1C4BNTH9TXKB31","actorType":"persona","role":"planner"}}
